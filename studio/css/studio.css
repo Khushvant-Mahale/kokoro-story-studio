@@ -1518,4 +1518,89 @@ input[type="range"]::-webkit-slider-thumb {
   transform: translateY(0);
 }
 
+/* ---------------- BATCH PROGRESS HUD BANNER ---------------- */
+.batch-progress-banner {
+  background: linear-gradient(135deg, rgba(23, 27, 44, 0.96), rgba(15, 17, 28, 0.96));
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  border-radius: var(--radius-md);
+  margin: 10px 24px 6px 24px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fadeInDown 0.2s ease-out;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.batch-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.batch-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+  box-shadow: 0 0 10px #3b82f6;
+  animation: pulseGlow 1.2s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+}
+
+.batch-stat-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+
+.batch-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+}
+
+.batch-stat-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.batch-stat-box.highlight .batch-stat-val {
+  color: #60a5fa;
+  font-size: 15px;
+}
+
+.batch-progress-bar-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.batch-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+  width: 0%;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+
 

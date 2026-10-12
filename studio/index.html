@@ -6,7 +6,7 @@
   <title>Kokoro Story Studio — Dashboard & Dynamic TTS</title>
   <link rel="icon" type="image/svg+xml" href="/studio/favicon.svg">
   <link rel="alternate icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/studio/css/studio.css?v=370">
+  <link rel="stylesheet" href="/studio/css/studio.css?v=380">
 </head>
 <body>
 
@@ -62,7 +62,14 @@
       </div>
 
       <div class="nav-right">
-        <button class="btn batch-btn" id="btn-batch-generate" onclick="toggleBatchRender()" title="Render all sentences sequentially one by one">⚡ Render All (1 by 1)</button>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <select id="batch-concurrency-select" class="action-pill-btn" style="background: var(--bg-surface); padding: 5px 8px; font-size: 11.5px; border-radius: 6px; cursor: pointer; color: var(--text-main); border: 1px solid var(--border-color);" title="Parallel GPU Synthesis Concurrency (1x for CPU, 3x-5x for GPU)">
+            <option value="1">⚡ 1x Sequential</option>
+            <option value="3" selected>🚀 3x Parallel (GPU)</option>
+            <option value="5">🔥 5x Turbo (GPU)</option>
+          </select>
+          <button class="btn batch-btn" id="btn-batch-generate" onclick="toggleBatchRender()" title="Render all sentences into audio cache">⚡ Render All</button>
+        </div>
         <button class="btn btn-secondary" id="btn-import-story" onclick="openImportModal()">📄 Import Text</button>
         <button class="btn btn-secondary" id="btn-export-zip" onclick="exportZipAudio()" title="Export all sentences as individual numbered audio files in a ZIP archive">📦 Export Audio (ZIP)</button>
         <button class="btn btn-primary" id="btn-export-master" onclick="exportMasterAudio()">🎬 Export Master WAV</button>
@@ -225,6 +232,46 @@
             <button class="action-pill-btn danger" id="btn-bulk-delete" onclick="handleBulkDelete()" title="Delete selected sentences" style="display: none;">
               🗑️ Delete
             </button>
+          </div>
+        </div>
+
+        <!-- BATCH PROGRESS HUD BANNER (Shows live elapsed, calculated ETA, speed and progress) -->
+        <div id="batch-progress-banner" class="batch-progress-banner" style="display: none;">
+          <div class="batch-banner-top">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="batch-pulse-dot"></span>
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-weight: 700; font-size: 13.5px; color: #fff;" id="batch-banner-title">Batch Synthesizing Story</span>
+                  <span id="batch-banner-concurrency-tag" class="meta-pill" style="color: #60a5fa; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); font-size: 11px;">🚀 3x Parallel GPU</span>
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;" id="batch-banner-counts">
+                  0 / 0 completed (0%)
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <div class="batch-stat-box">
+                <span class="batch-stat-label">ELAPSED TIME</span>
+                <span class="batch-stat-val" id="batch-stat-elapsed">00:00</span>
+              </div>
+              <div class="batch-stat-box highlight">
+                <span class="batch-stat-label">CALCULATED TIME REQ (ETA)</span>
+                <span class="batch-stat-val" id="batch-stat-eta">Estimating...</span>
+              </div>
+              <div class="batch-stat-box">
+                <span class="batch-stat-label">SPEED</span>
+                <span class="batch-stat-val" id="batch-stat-speed">--</span>
+              </div>
+              <button type="button" class="action-pill-btn" onclick="toggleBatchRender()" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4); padding: 5px 12px; font-size: 12px; font-weight: 600;">
+                ⏹ Stop Batch
+              </button>
+            </div>
+          </div>
+
+          <div class="batch-progress-bar-track">
+            <div class="batch-progress-bar-fill" id="batch-progress-bar-fill" style="width: 0%;"></div>
           </div>
         </div>
 
@@ -439,6 +486,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=370"></script>
+  <script src="/studio/js/app.js?v=380"></script>
 </body>
 </html>

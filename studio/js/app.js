@@ -107,6 +107,22 @@ function updateEngineUI(remoteUrl, active) {
     }
   });
 
+  // Auto-configure parallel concurrency selector according to GPU vs CPU mode
+  const concurrencySelect = document.getElementById("batch-concurrency-select");
+  if (concurrencySelect) {
+    if (isOnline) {
+      if (concurrencySelect.value === "1") concurrencySelect.value = "3";
+    } else {
+      concurrencySelect.value = "1";
+    }
+  }
+
+  // Update batch render button initial label if not actively running
+  const batchBtn = document.getElementById("btn-batch-generate");
+  if (batchBtn && !state.isBatchRunning) {
+    batchBtn.textContent = isOnline ? "⚡ Render All (GPU)" : "⚡ Render All (1 by 1)";
+  }
+
   // Update modal controls
   const urlInput = document.getElementById("colab-url-input");
   if (urlInput && remoteUrl !== undefined) {
@@ -1043,30 +1059,46 @@ async function handleBulkRender() {
   if (selectedList.length === 0) return;
 
   const btnBulkRender = document.getElementById("btn-bulk-render");
+  const isGPU = Boolean(state.config.active && state.config.remote_worker_url);
+  const concurrencySelect = document.getElementById("batch-concurrency-select");
+  let concurrency = concurrencySelect ? parseInt(concurrencySelect.value, 10) : 1;
+  if (!concurrency || concurrency < 1) concurrency = isGPU ? 3 : 1;
+  if (!isGPU && concurrency > 2) concurrency = 1;
+
   if (btnBulkRender) {
-    btnBulkRender.textContent = `⏳ Rendering (0/${selectedList.length})...`;
     btnBulkRender.disabled = true;
+    btnBulkRender.textContent = `⏳ Rendering (0/${selectedList.length})...`;
   }
 
+  const startTime = Date.now();
   let completed = 0;
-  for (let idx of selectedList) {
+  let taskIndex = 0;
+
+  function updateBulkBtn() {
+    if (!btnBulkRender) return;
+    const elapsedSec = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+    if (completed > 0) {
+      const rate = completed / elapsedSec;
+      const remaining = selectedList.length - completed;
+      const etaSec = Math.round(remaining / rate);
+      btnBulkRender.textContent = `⏳ (${completed}/${selectedList.length}) • ETA ${formatBatchDuration(etaSec)}`;
+    } else {
+      btnBulkRender.textContent = `⏳ Rendering (0/${selectedList.length})...`;
+    }
+  }
+
+  async function renderSingleSelected(idx) {
     const block = state.currentProject.blocks[idx];
-    if (!block) continue;
+    if (!block) return;
     const row = document.querySelectorAll(".block-row")[idx];
     const currentSig = getBlockSignature(block);
 
-    if (btnBulkRender) {
-      btnBulkRender.textContent = `⏳ Rendering (${completed + 1}/${selectedList.length})...`;
-    }
-
     if (block.cachedAudioUrl && block.cachedSig === currentSig) {
       if (row) row.classList.add("ready");
-      completed++;
-      continue;
+      return;
     }
 
     if (row) {
-      row.scrollIntoView({ behavior: "smooth", block: "nearest" });
       row.classList.add("processing");
       row.classList.remove("ready");
     }
@@ -1094,16 +1126,32 @@ async function handleBulkRender() {
           row.classList.remove("processing");
           row.classList.add("ready");
           const timeText = row.querySelector(".scrubber-time");
-          if (timeText && data.duration) timeText.textContent = `${data.duration.toFixed(1)}s`;
+          if (timeText && data.duration) timeText.textContent = `● ${data.duration.toFixed(1)}s`;
         }
       }
     } catch (err) {
       console.error("Bulk render error on block", idx, err);
       if (row) row.classList.remove("processing");
     }
-    completed++;
-    await new Promise(r => setTimeout(r, 60));
   }
+
+  async function worker() {
+    while (taskIndex < selectedList.length) {
+      const current = taskIndex++;
+      const blockIdx = selectedList[current];
+      if (blockIdx === undefined) break;
+      await renderSingleSelected(blockIdx);
+      completed++;
+      updateBulkBtn();
+    }
+  }
+
+  const workers = [];
+  const actualConcurrency = Math.min(concurrency, selectedList.length);
+  for (let c = 0; c < actualConcurrency; c++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
 
   if (btnBulkRender) {
     btnBulkRender.disabled = false;
@@ -1113,7 +1161,9 @@ async function handleBulkRender() {
     }, 2500);
   }
   renderTimeline();
-  showToast(`✓ Finished rendering ${selectedList.length} sentence(s)!`);
+  updateStoryTimeDisplay();
+  const totalElapsed = formatBatchDuration((Date.now() - startTime) / 1000);
+  showToast(`✓ Rendered ${selectedList.length} sentence(s) in ${totalElapsed}!`);
 }
 
 function updateActiveSentenceHint(idx) {
@@ -1560,62 +1610,159 @@ function handleMasterNext() {
   playBlockAudio(nextIdx, 0, false);
 }
 
-// ---------------- SEQUENTIAL BATCH GENERATOR (1 BY 1) ---------------- //
+// ---------------- PARALLEL GPU BATCH GENERATOR & LIVE ETA ---------------- //
+
+function formatBatchDuration(totalSec) {
+  if (isNaN(totalSec) || totalSec <= 0) return "00:00";
+  const sec = Math.floor(totalSec % 60);
+  const min = Math.floor((totalSec / 60) % 60);
+  const hrs = Math.floor(totalSec / 3600);
+  const pad = (n) => String(n).padStart(2, "0");
+  if (hrs > 0) {
+    return `${hrs}h ${pad(min)}m ${pad(sec)}s`;
+  }
+  return `${pad(min)}:${pad(sec)}`;
+}
+
+let batchTimerInterval = null;
 
 async function toggleBatchRender() {
   const batchBtn = document.getElementById("btn-batch-generate");
-  if (!state.currentProject || !state.currentProject.blocks.length) return;
+  const banner = document.getElementById("batch-progress-banner");
+  if (!state.currentProject || !state.currentProject.blocks || !state.currentProject.blocks.length) return;
 
+  // STOPPING IF ALREADY RUNNING
   if (state.isBatchRunning) {
     state.isBatchRunning = false;
+    clearInterval(batchTimerInterval);
     if (batchBtn) {
-      batchBtn.textContent = "⚡ Render All (1 by 1)";
       batchBtn.classList.remove("stopping");
+      const isOnline = Boolean(state.config.active && state.config.remote_worker_url);
+      batchBtn.textContent = isOnline ? "⚡ Render All (GPU)" : "⚡ Render All (1 by 1)";
     }
+    if (banner) banner.style.display = "none";
+    showToast("⏹ Batch rendering stopped.");
     return;
   }
 
+  // STARTING BATCH RENDER
   state.isBatchRunning = true;
-  if (batchBtn) {
-    batchBtn.classList.add("stopping");
-  }
-
   const blocks = state.currentProject.blocks;
   const total = blocks.length;
 
+  // Determine concurrency from dropdown or mode
+  const concurrencySelect = document.getElementById("batch-concurrency-select");
+  let concurrency = concurrencySelect ? parseInt(concurrencySelect.value, 10) : 1;
+  const isGPU = Boolean(state.config.active && state.config.remote_worker_url);
+  if (!concurrency || concurrency < 1) concurrency = isGPU ? 3 : 1;
+  // If running local CPU, safety clamp concurrency to 2 max to prevent system freeze
+  if (!isGPU && concurrency > 2) {
+    concurrency = 1;
+    if (concurrencySelect) concurrencySelect.value = "1";
+  }
+
+  // Filter tasks that actually need rendering (skip already cached)
+  const tasksToRender = [];
+  let alreadyCachedCount = 0;
+
   for (let i = 0; i < total; i++) {
-    if (!state.isBatchRunning) break;
-
     const block = blocks[i];
-    const row = document.querySelectorAll(".block-row")[i];
-    const playBtn = row ? row.querySelector(".play-block-btn") : null;
     const currentSig = getBlockSignature(block);
-
-    if (batchBtn) {
-      batchBtn.textContent = `⏹ Stop (${i + 1}/${total})`;
-    }
-
-    // If already generated with matching signature, mark ready and move to next
     if (block.cachedAudioUrl && block.cachedSig === currentSig) {
+      alreadyCachedCount++;
+      const row = document.querySelectorAll(".block-row")[i];
       if (row) {
         row.classList.add("ready");
         row.classList.remove("processing");
         const timeText = row.querySelector(".scrubber-time");
         if (timeText && block.duration) timeText.textContent = `● ${block.duration.toFixed(1)}s`;
       }
-      continue;
+    } else {
+      tasksToRender.push(i);
+    }
+  }
+
+  if (tasksToRender.length === 0) {
+    state.isBatchRunning = false;
+    showToast("✓ All sentences are already rendered!");
+    if (batchBtn) batchBtn.textContent = "✓ All Rendered";
+    setTimeout(() => {
+      batchBtn.textContent = isGPU ? "⚡ Render All (GPU)" : "⚡ Render All (1 by 1)";
+    }, 2000);
+    return;
+  }
+
+  // Setup UI HUD
+  if (batchBtn) batchBtn.classList.add("stopping");
+  if (banner) banner.style.display = "flex";
+
+  const bannerTitle = document.getElementById("batch-banner-title");
+  const concurrencyTag = document.getElementById("batch-banner-concurrency-tag");
+  const countsEl = document.getElementById("batch-banner-counts");
+  const elapsedEl = document.getElementById("batch-stat-elapsed");
+  const etaEl = document.getElementById("batch-stat-eta");
+  const speedEl = document.getElementById("batch-stat-speed");
+  const progressFill = document.getElementById("batch-progress-bar-fill");
+
+  if (bannerTitle) bannerTitle.textContent = `Batch Synthesizing ${total} Sentences`;
+  if (concurrencyTag) {
+    concurrencyTag.textContent = isGPU
+      ? `🚀 ${concurrency}x Parallel GPU`
+      : `⚡ ${concurrency}x Parallel CPU`;
+  }
+
+  // State trackers
+  const startTime = Date.now();
+  let newlyRenderedCount = 0;
+  let taskIndex = 0;
+
+  function updateHUD() {
+    const elapsedSec = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+    const completedTotal = alreadyCachedCount + newlyRenderedCount;
+    const pct = Math.min(100, (completedTotal / total) * 100).toFixed(1);
+
+    if (elapsedEl) elapsedEl.textContent = formatBatchDuration(elapsedSec);
+    if (progressFill) progressFill.style.width = `${pct}%`;
+    if (countsEl) {
+      countsEl.textContent = `${completedTotal} / ${total} completed (${pct}%) • ${tasksToRender.length - newlyRenderedCount} remaining`;
     }
 
-    // Highlight active sentence as processing
+    if (newlyRenderedCount >= 1) {
+      const rate = newlyRenderedCount / elapsedSec; // sentences per second
+      const remainingTasks = Math.max(0, tasksToRender.length - newlyRenderedCount);
+      const etaSec = Math.round(remainingTasks / rate);
+      const etaFormatted = formatBatchDuration(etaSec);
+
+      if (etaEl) etaEl.textContent = `~${etaFormatted} left`;
+      if (speedEl) speedEl.textContent = `${rate.toFixed(1)} sent/s (${(1 / rate).toFixed(2)}s/sent)`;
+      if (batchBtn) batchBtn.textContent = `⏹ Stop (${completedTotal}/${total}) • ETA ${etaFormatted}`;
+    } else {
+      if (etaEl) etaEl.textContent = "Calculating...";
+      if (speedEl) speedEl.textContent = "Warming up...";
+      if (batchBtn) batchBtn.textContent = `⏹ Stop (${completedTotal}/${total})`;
+    }
+  }
+
+  updateHUD();
+  clearInterval(batchTimerInterval);
+  batchTimerInterval = setInterval(() => {
+    if (state.isBatchRunning) updateHUD();
+  }, 1000);
+
+  // Single sentence render function
+  async function renderBlockByIndex(idx) {
+    const block = blocks[idx];
+    const row = document.querySelectorAll(".block-row")[idx];
+    const playBtn = row ? row.querySelector(".play-block-btn") : null;
+    const currentSig = getBlockSignature(block);
+
     if (row) {
-      row.scrollIntoView({ behavior: "smooth", block: "nearest" });
       row.classList.add("processing");
       row.classList.remove("ready");
       if (playBtn) playBtn.textContent = "⏳";
       const timeText = row.querySelector(".scrubber-time");
       if (timeText) timeText.textContent = "⏳ Synthesizing...";
     }
-    renderTimeline();
 
     try {
       const res = await fetch("/api/synthesize_block", {
@@ -1643,34 +1790,75 @@ async function toggleBatchRender() {
           if (timeText && data.duration) timeText.textContent = `● ${data.duration.toFixed(1)}s`;
         }
         if (playBtn) playBtn.textContent = "▶";
-        updateStoryTimeDisplay();
-        renderTimeline();
       }
     } catch (err) {
-      console.error(`Error rendering block ${i}:`, err);
+      console.error(`Error rendering sentence ${idx}:`, err);
       if (row) {
         row.classList.remove("processing");
         const timeText = row.querySelector(".scrubber-time");
-        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+        if (timeText) timeText.textContent = "Draft (click ▶ to retry)";
       }
       if (playBtn) playBtn.textContent = "▶";
-      renderTimeline();
     }
-
-    // Small delay between blocks
-    await new Promise(r => setTimeout(r, 80));
   }
 
+  // Concurrent worker loop
+  async function runWorker(workerId) {
+    while (taskIndex < tasksToRender.length && state.isBatchRunning) {
+      const currentTaskIndex = taskIndex++;
+      const blockIdx = tasksToRender[currentTaskIndex];
+      if (blockIdx === undefined) break;
+
+      await renderBlockByIndex(blockIdx);
+      newlyRenderedCount++;
+      updateHUD();
+      renderTimeline();
+      updateStoryTimeDisplay();
+    }
+  }
+
+  // Launch parallel worker pool
+  const activeWorkers = [];
+  const actualConcurrency = Math.min(concurrency, tasksToRender.length);
+  for (let c = 0; c < actualConcurrency; c++) {
+    activeWorkers.push(runWorker(c + 1));
+  }
+
+  await Promise.all(activeWorkers);
+
+  // Completion
+  clearInterval(batchTimerInterval);
+  const wasStopped = !state.isBatchRunning;
   state.isBatchRunning = false;
+
   if (batchBtn) {
     batchBtn.classList.remove("stopping");
-    batchBtn.textContent = "✓ All Rendered!";
+    batchBtn.textContent = wasStopped ? "⏹ Stopped" : "✓ All Rendered!";
     setTimeout(() => {
-      batchBtn.textContent = "⚡ Render All (1 by 1)";
+      const isOnline = Boolean(state.config.active && state.config.remote_worker_url);
+      batchBtn.textContent = isOnline ? "⚡ Render All (GPU)" : "⚡ Render All (1 by 1)";
     }, 3000);
   }
+
+  if (banner) {
+    if (!wasStopped) {
+      if (progressFill) progressFill.style.width = "100%";
+      if (countsEl) countsEl.textContent = `✓ All ${total} sentences successfully synthesized and cached!`;
+      if (etaEl) etaEl.textContent = "Done! (0s)";
+      setTimeout(() => {
+        banner.style.display = "none";
+      }, 4000);
+    } else {
+      banner.style.display = "none";
+    }
+  }
+
   renderTimeline();
-  showToast("✓ All sentences rendered and ready for playback!");
+  updateStoryTimeDisplay();
+  if (!wasStopped) {
+    const totalDurationStr = formatBatchDuration((Date.now() - startTime) / 1000);
+    showToast(`✓ All ${tasksToRender.length} sentences rendered in ${totalDurationStr}!`);
+  }
 }
 
 // ---------------- VOICE DRAWER: SEARCH, FILTER & SORT ---------------- //

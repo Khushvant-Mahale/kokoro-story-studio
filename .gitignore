@@ -28,8 +28,9 @@ output/*.zip
 !output/samples/
 !output/samples/*.wav
 
-# Local user configuration & tunnel URLs
+# Local user configuration & project data
 projects/config.json
+projects/proj_*.json
 
 # OS & IDE temporary files
 .DS_Store

@@ -19,6 +19,7 @@ import sys
 import io
 import re
 import time
+import asyncio
 import urllib.request
 import subprocess
 from pathlib import Path
@@ -219,33 +220,34 @@ async def synthesize(req: Request):
 
     t0 = time.time()
     voice_vec = get_voice_vector(voice_id, blend_weights)
-
-    # Sub-chunk optimization for long blocks (> 120 chars)
-    # Prevents O(N^2) attention calculation slowdown on large blocks
     clean = text.strip()
-    if len(clean) > 120 and any(p in clean for p in [". ", "? ", "! ", "... "]):
-        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+|\n+', clean) if s.strip()]
-        if len(sentences) > 1:
-            all_samples = []
-            sr = 24000
-            for s in sentences:
-                sub_samples, sr = kokoro.create(s, voice=voice_vec, speed=speed, lang=lang)
-                all_samples.append(sub_samples)
-                # 80ms natural breath pause between sentences within the block
-                all_samples.append(np.zeros(int(sr * 0.08), dtype=np.float32))
-            samples = np.concatenate(all_samples)
-            sample_rate = sr
+
+    # Offload inference to worker thread so asyncio event loop stays non-blocking for concurrent parallel requests
+    def _run_inference():
+        if len(clean) > 120 and any(p in clean for p in [". ", "? ", "! ", "... "]):
+            sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+|\n+', clean) if s.strip()]
+            if len(sentences) > 1:
+                all_samples = []
+                sr = 24000
+                for s in sentences:
+                    sub_samples, sr = kokoro.create(s, voice=voice_vec, speed=speed, lang=lang)
+                    all_samples.append(sub_samples)
+                    all_samples.append(np.zeros(int(sr * 0.08), dtype=np.float32))
+                s_arr = np.concatenate(all_samples)
+                s_rate = sr
+            else:
+                s_arr, s_rate = kokoro.create(clean, voice=voice_vec, speed=speed, lang=lang)
         else:
-            samples, sample_rate = kokoro.create(clean, voice=voice_vec, speed=speed, lang=lang)
-    else:
-        samples, sample_rate = kokoro.create(clean, voice=voice_vec, speed=speed, lang=lang)
+            s_arr, s_rate = kokoro.create(clean, voice=voice_vec, speed=speed, lang=lang)
 
-    if gain != 1.0:
-        samples = samples * gain
+        if gain != 1.0:
+            s_arr = s_arr * gain
 
-    buf = io.BytesIO()
-    soundfile.write(buf, samples, sample_rate, format="WAV")
-    audio_bytes = buf.getvalue()
+        buf = io.BytesIO()
+        soundfile.write(buf, s_arr, s_rate, format="WAV")
+        return buf.getvalue()
+
+    audio_bytes = await asyncio.to_thread(_run_inference)
     elapsed = time.time() - t0
     print(f"⚡ Synthesized '{text[:30]}...' in {elapsed:.3f}s on {gpu_name}")
 

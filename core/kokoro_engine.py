@@ -156,7 +156,7 @@ class KokoroEngine:
                         "User-Agent": "KokoroStudio/1.0"
                     }
                 )
-                with urllib.request.urlopen(req, timeout=7) as response:
+                with urllib.request.urlopen(req, timeout=15) as response:
                     audio_bytes = response.read()
                     if audio_bytes and len(audio_bytes) > 100:
                         with open(cache_file, "wb") as f:
