@@ -1,0 +1,38 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Large model binaries & tensors (Kokoro ONNX)
+models/*.onnx
+models/*.bin
+models/*.json
+*.onnx
+*.bin
+
+# Dynamic Audio Cache
+cache/
+cache/*.wav
+
+# Rendered Story Audio Outputs (preserve samples directory)
+output/*.mp3
+output/*.wav
+output/*.zip
+!output/samples/
+!output/samples/*.wav
+
+# Local user configuration & tunnel URLs
+projects/config.json
+
+# OS & IDE temporary files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

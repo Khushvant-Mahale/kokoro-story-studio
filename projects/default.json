@@ -1,0 +1,487 @@
+{
+  "id": "default",
+  "title": "The Endless Eclipse - Episode 1",
+  "blocks": [
+    {
+      "id": "b_1",
+      "text": "It was supposed to be just another normal day, but one strange morning changed everything I knew about the world.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/0a87bd83b7fdbf7cb50c331b1b798a82.wav",
+      "cachedSig": "It was supposed to be just another normal day, but one strange morning changed everything I knew about the world.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 6.81
+    },
+    {
+      "id": "b_2",
+      "text": "Hi, I am Mark, and I live in an old radio observatory high up in the mountains, far away from the chaos of the city.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/8b8e8aaea2a7084d249a616a6798cd12.wav",
+      "cachedSig": "Hi, I am Mark, and I live in an old radio observatory high up in the mountains, far away from the chaos of the city.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 8.06
+    },
+    {
+      "id": "b_3",
+      "text": "I always thought being isolated was a good thing... until one morning, at exactly six fourteen, the sun never rose.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/5a469bc5181dbe28df82032171ff4676.wav",
+      "cachedSig": "I always thought being isolated was a good thing... until one morning, at exactly six fourteen, the sun never rose.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 8.32
+    },
+    {
+      "id": "b_4",
+      "text": "And that is when everything started to go wrong.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/f5bfc6aa063bbe3caa69c7266c13aef7.wav",
+      "cachedSig": "And that is when everything started to go wrong.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 2.82
+    },
+    {
+      "id": "b_5",
+      "text": "At six fourteen in the morning, the sun failed to rise.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/9b57a80b024ed67682342845d57f316e.wav",
+      "cachedSig": "At six fourteen in the morning, the sun failed to rise.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 3.95
+    },
+    {
+      "id": "b_6",
+      "text": "The first thing that disappeared was the birdsong.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/80f58d0bb2e0f2f20733e24422cff95e.wav",
+      "cachedSig": "The first thing that disappeared was the birdsong.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 2.79
+    },
+    {
+      "id": "b_7",
+      "text": "I remember that because I had been awake all night, listening to the wind scrape against the observatory rusted antenna.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/a6650566485a27edea00ee712b48b4e6.wav",
+      "cachedSig": "I remember that because I had been awake all night, listening to the wind scrape against the observatory rusted antenna.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 7.36
+    },
+    {
+      "id": "b_8",
+      "text": "The mountain was usually full of noise before sunrise... birds, insects, distant trucks grinding up the valley road. At six thirteen, all of it stopped.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/bf08ff6ba81b7b6e60d0f4db4020b580.wav",
+      "cachedSig": "The mountain was usually full of noise before sunrise... birds, insects, distant trucks grinding up the valley road. At six thirteen, all of it stopped.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 10.76
+    },
+    {
+      "id": "b_9",
+      "text": "I checked the clock above the radio desk. Six fourteen.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/ea022dd7ff53711329deb25ef2892dcf.wav",
+      "cachedSig": "I checked the clock above the radio desk. Six fourteen.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 4.44
+    },
+    {
+      "id": "b_10",
+      "text": "The eastern horizon was supposed to turn orange in six minutes.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/ddd0e6d7c2089401787b909e18f189bf.wav",
+      "cachedSig": "The eastern horizon was supposed to turn orange in six minutes.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 4.14
+    },
+    {
+      "id": "b_11",
+      "text": "Instead, something black spilled over the mountains. It didn't roll like fog. It climbed.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/a67c6f8f89179d431abc94ad548c30fc.wav",
+      "cachedSig": "Instead, something black spilled over the mountains. It didn't roll like fog. It climbed.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 6.17
+    },
+    {
+      "id": "b_12",
+      "text": "A thick, ash-colored darkness poured down the slopes and swallowed the pine trees one row at a time. It moved against the wind.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/e04664ea4dc7190a00b85a847f1ee822.wav",
+      "cachedSig": "A thick, ash-colored darkness poured down the slopes and swallowed the pine trees one row at a time. It moved against the wind.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 8.78
+    },
+    {
+      "id": "b_13",
+      "text": "It flowed around boulders, over rooftops, through the narrow streets of the city below.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/d5ed7ed234f2782fcfc34a05debb091b.wav",
+      "cachedSig": "It flowed around boulders, over rooftops, through the narrow streets of the city below.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 5.38
+    },
+    {
+      "id": "b_14",
+      "text": "Then every streetlight in the valley went out simultaneously.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/7fdcc8eaaded227cb2b7ca48387b34c8.wav",
+      "cachedSig": "Then every streetlight in the valley went out simultaneously.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 3.58
+    },
+    {
+      "id": "b_15",
+      "text": "I watched the city vanish behind the glass.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/12091de3374687dc2bfc89b2e849ba38.wav",
+      "cachedSig": "I watched the city vanish behind the glass.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 2.67
+    },
+    {
+      "id": "b_16",
+      "text": "For one stupid moment, I thought it was a power cut.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/2691496e81bc692b24344791a6db3bd0.wav",
+      "cachedSig": "For one stupid moment, I thought it was a power cut.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 3.31
+    },
+    {
+      "id": "b_17",
+      "text": "Then the radio screamed.",
+      "voice_id": "am_fenrir",
+      "speed": 0.96,
+      "gain": 1.1,
+      "pause_after": 0.7,
+      "cachedAudioUrl": "/api/audio/bb9cd892d8afb7038ee9687e5a0d6f40.wav",
+      "cachedSig": "Then the radio screamed.__am_fenrir____0.96__1.10",
+      "duration": 1.54
+    },
+    {
+      "id": "b_18",
+      "text": "Every frequency, every channel, every station collapsed into a single low tone that vibrated through the desk and into my teeth.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/3a5ef745b1fbbec3fbca1fcef864fcc1.wav",
+      "cachedSig": "Every frequency, every channel, every station collapsed into a single low tone that vibrated through the desk and into my teeth.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 9.07
+    },
+    {
+      "id": "b_19",
+      "text": "The observatory's digital clocks blinked. My mobile phone went black.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/a4dcfbb49f25c330ff1eecf664ad8453.wav",
+      "cachedSig": "The observatory's digital clocks blinked. My mobile phone went black.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 5.01
+    },
+    {
+      "id": "b_20",
+      "text": "The diesel generator coughed once and stopped.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/ed8048aeaf8e9b101b135d2f2fb8d55d.wav",
+      "cachedSig": "The diesel generator coughed once and stopped.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 2.88
+    },
+    {
+      "id": "b_21",
+      "text": "Outside, somewhere below the mountain, a woman began screaming. She screamed for eleven seconds.",
+      "voice_id": "am_fenrir",
+      "speed": 0.96,
+      "gain": 1.1,
+      "pause_after": 0.7,
+      "cachedAudioUrl": "/api/audio/4036d8c20a534c51fe73cd0f99a4447f.wav",
+      "cachedSig": "Outside, somewhere below the mountain, a woman began screaming. She screamed for eleven seconds.__am_fenrir____0.96__1.10",
+      "duration": 6.34
+    },
+    {
+      "id": "b_22",
+      "text": "Then she said, in a perfectly calm voice:",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.4,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/dccdfac6c5109c3955b6254e4d7f4d53.wav",
+      "cachedSig": "Then she said, in a perfectly calm voice:__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 2.9
+    },
+    {
+      "id": "b_23",
+      "text": "Yes, Of course..",
+      "voice_id": "af_heart",
+      "speed": 0.72,
+      "gain": 0.5,
+      "pause_after": 0.8,
+      "duration": 1.79,
+      "cachedAudioUrl": "/api/audio/6da90530c48f758c734aa00733d36cfd.wav",
+      "cachedSig": "Yes, Of course..__af_heart____0.72__0.50"
+    },
+    {
+      "id": "b_24",
+      "text": "I didn't see her again. I spent the next thirty minutes trying to call the city. No network. No emergency lines. No internet.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/4e3bfb4e1c77c37cc7892627925bb7cf.wav",
+      "cachedSig": "I didn't see her again. I spent the next thirty minutes trying to call the city. No network. No emergency lines. No internet.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 8.91
+    },
+    {
+      "id": "b_25",
+      "text": "I tried the observatory landline, which had been disconnected for years. It rang. I dropped it. It rang again.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 0.5,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/e5ed82d94be94765caef8a290e4766c2.wav",
+      "cachedSig": "I tried the observatory landline, which had been disconnected for years. It rang. I dropped it. It rang again.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__0.50",
+      "duration": 8.15
+    },
+    {
+      "id": "b_26",
+      "text": "On the fourth ring, someone answered. A little boy whispered,",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.4,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/2f2c9cd4db918994482479046011e062.wav",
+      "cachedSig": "On the fourth ring, someone answered. A little boy whispered,__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 4.25
+    },
+    {
+      "id": "b_27",
+      "text": "Why did you leave us outside?",
+      "voice_id": "af_river",
+      "speed": 0.78,
+      "gain": 0.7,
+      "pause_after": 1.2,
+      "cachedAudioUrl": "/api/audio/4b8486fd75d7bb17b970f66ff217fd92.wav",
+      "cachedSig": "Why did you leave us outside?__af_river____0.78__0.70",
+      "duration": 2.24
+    },
+    {
+      "id": "b_28",
+      "text": "Then the line went dead. I was alone in a radio observatory built in nineteen sixty-eight, three kilometers above the nearest town.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/499eff48eb4c8d30773e1a34335f54dd.wav",
+      "cachedSig": "Then the line went dead. I was alone in a radio observatory built in nineteen sixty-eight, three kilometers above the nearest town.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 8.8
+    },
+    {
+      "id": "b_29",
+      "text": "I had thirty days of emergency rations, two car batteries, a hand-cranked receiver, a telescope, a few flashlights, and a diesel generator with a questionable fuel reserve.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/59b299396cc5bd2be4d60e446202b957.wav",
+      "cachedSig": "I had thirty days of emergency rations, two car batteries, a hand-cranked receiver, a telescope, a few flashlights, and a diesel generator with a questionable fuel reserve.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 11.71
+    },
+    {
+      "id": "b_30",
+      "text": "I had always considered myself fortunate to work somewhere remote.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/0278deed585ec07ac4e8105389cd434c.wav",
+      "cachedSig": "I had always considered myself fortunate to work somewhere remote.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 4.25
+    },
+    {
+      "id": "b_31",
+      "text": "By the end of the first day, I understood that remoteness was not the same thing as safety.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/4a424afd80df83e7c083343827ec9dfe.wav",
+      "cachedSig": "By the end of the first day, I understood that remoteness was not the same thing as safety.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 5.76
+    },
+    {
+      "id": "b_32",
+      "text": "And by the end of the first week, I would understand that the fog wasn't trying to get inside.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/602db98bbd8d0a98d29a50bef8de69af.wav",
+      "cachedSig": "And by the end of the first week, I would understand that the fog wasn't trying to get inside.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 5.48
+    },
+    {
+      "id": "b_33",
+      "text": "It was trying to get me to open the door.",
+      "voice_id": "blend_adam_onyx",
+      "speed": 0.9,
+      "gain": 1,
+      "pause_after": 0.6,
+      "blend_weights": {
+        "am_adam": 0.65,
+        "am_onyx": 0.35
+      },
+      "cachedAudioUrl": "/api/audio/67577b9bc83b27fd4ea67315115eeec0.wav",
+      "cachedSig": "It was trying to get me to open the door.__blend_adam_onyx__am_adam:0.65,am_onyx:0.35__0.90__1.00",
+      "duration": 2.13
+    }
+  ],
+  "master_filename": "The_Endless_Eclipse_Master_Track.wav",
+  "default_voice": "blend_adam_onyx"
+}

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kokoro Story Studio — Dashboard & Dynamic TTS</title>
+  <link rel="icon" type="image/svg+xml" href="/studio/favicon.svg">
+  <link rel="alternate icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/studio/css/studio.css?v=360">
+</head>
+<body>
+
+  <!-- ================= VIEW 1: PROJECTS DASHBOARD ================= -->
+  <div id="view-dashboard">
+    <header class="dashboard-header">
+      <div class="brand-row">
+        <span class="brand-badge">Kokoro</span>
+        <span class="brand-title">Story Projects</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <button class="engine-badge-btn" id="btn-dashboard-engine-status" onclick="openColabModal()" title="Configure Cloud GPU (Google Colab / Kaggle)">
+          <span class="engine-dot"></span>
+          <span class="engine-label">⚡ Local CPU Engine</span>
+          <span class="engine-config-tag">⚙️</span>
+        </button>
+        <button class="btn btn-primary" id="btn-create-project-top" onclick="openNewProjectModal()">＋ New Story Project</button>
+      </div>
+    </header>
+
+    <div class="dashboard-content">
+      <div class="section-headline-row">
+        <span class="section-title">Your Audio Projects</span>
+        <span style="font-size: 13px; color: var(--text-muted);" id="dashboard-project-count">Loading projects...</span>
+      </div>
+
+      <div class="projects-grid" id="projects-grid">
+        <!-- Project cards rendered dynamically by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= VIEW 2: STUDIO EDITOR ================= -->
+  <div id="view-studio">
+
+    <!-- TOP NAVBAR -->
+    <header class="top-nav">
+      <div class="nav-left">
+        <button class="btn-back" id="btn-back-to-dashboard" onclick="switchToView('dashboard')">
+          ← Projects
+        </button>
+        <input type="text" class="project-title-input" id="project-title" value="The Endless Eclipse">
+      </div>
+
+      <div class="nav-center">
+        <button class="engine-badge-btn" id="btn-engine-status" onclick="openColabModal()" title="Configure Cloud GPU (Google Colab / Kaggle)">
+          <span class="engine-dot"></span>
+          <span class="engine-label">⚡ Local CPU Engine</span>
+          <span class="engine-config-tag">⚙️</span>
+        </button>
+      </div>
+
+      <div class="nav-right">
+        <button class="btn batch-btn" id="btn-batch-generate" onclick="toggleBatchRender()" title="Render all sentences sequentially one by one">⚡ Render All (1 by 1)</button>
+        <button class="btn btn-secondary" id="btn-import-story" onclick="openImportModal()">📄 Import Text</button>
+        <button class="btn btn-secondary" id="btn-export-zip" onclick="exportZipAudio()" title="Export all sentences as individual numbered audio files in a ZIP archive">📦 Export Audio (ZIP)</button>
+        <button class="btn btn-primary" id="btn-export-master" onclick="exportMasterAudio()">🎬 Export Master WAV</button>
+      </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="main-wrapper">
+
+      <!-- RAIL NAVIGATION -->
+      <nav class="rail-nav">
+        <button class="rail-btn active" id="rail-edit-btn" onclick="switchToView('studio')" title="Editor">
+          ✏️
+          <span>Edit</span>
+        </button>
+        <button class="rail-btn" id="rail-voices-btn" onclick="openVoiceDrawer()" title="Voice Library">
+          👥
+          <span>Voices</span>
+        </button>
+      </nav>
+
+      <!-- LEFT INSPECTOR -->
+      <!-- LEFT INSPECTOR -->
+      <aside class="inspector-panel">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <span id="inspector-header-title">Edit Speech</span>
+          <span class="selection-pill" id="selection-count-badge" style="display: none;">1 Selected</span>
+        </div>
+
+        <!-- Selected Voice Card -->
+        <div class="inspector-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span class="section-label" id="inspector-voice-section-label">Active Voice</span>
+            <span id="default-voice-indicator" style="font-size: 11px; font-weight: 600; color: var(--accent);"></span>
+          </div>
+          <div class="voice-card-trigger" id="inspector-voice-card" title="Click to choose a different voice">
+            <div class="voice-avatar-badge" id="inspector-voice-avatar" style="background-color: #ea580c">FO</div>
+            <div class="voice-meta-col">
+              <span class="voice-name" id="inspector-voice-name">Gritty Thriller (Fenrir + Onyx)</span>
+              <span class="voice-sub" id="inspector-voice-sub">Deep Baritone • Horror/Mystery</span>
+            </div>
+          </div>
+          <button class="action-pill-btn" id="btn-make-default-voice" onclick="handleMakeDefaultVoice()" style="width: 100%; margin-top: 8px; justify-content: center; font-size: 11.5px; border-radius: 6px; padding: 6px 10px;" title="Set this voice as the default narrator for story text">
+            ★ Make Default Story Narrator
+          </button>
+        </div>
+
+        <!-- Playback Controls -->
+        <div class="inspector-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span class="section-label">Acoustics & Pacing</span>
+            <span style="font-size: 11px; color: var(--accent); font-weight: 600;" id="inspector-scope-label">1 Sentence</span>
+          </div>
+
+          <!-- Volume -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Volume (Gain)</span>
+              <span class="control-val" id="val-volume">100%</span>
+            </div>
+            <input type="range" id="slider-volume" min="50" max="150" value="100">
+          </div>
+
+          <!-- Speed -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Pacing Speed</span>
+              <span class="control-val" id="val-speed">0.90x</span>
+            </div>
+            <input type="range" id="slider-speed" min="0.70" max="1.30" step="0.02" value="0.90">
+          </div>
+
+          <!-- Pause Gap -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Trailing Breath Gap</span>
+              <span class="control-val" id="val-pause">0.6s</span>
+            </div>
+            <input type="range" id="slider-pause" min="0.0" max="3.0" step="0.1" value="0.6">
+          </div>
+        </div>
+
+        <!-- Delivery & Character Presets -->
+        <div class="inspector-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span class="section-label">Character & Delivery Presets</span>
+            <span style="font-size: 11px; color: var(--accent); font-weight: 600;">1-Click</span>
+          </div>
+          <div class="preset-grid">
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('narrator')" title="Set as Standard Narrator (0.90x speed, 100% volume, 0.6s pause)">
+              🎙️ Narrator
+            </button>
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('whisper')" title="Set as Soft Ghostly Whisper (River/Echo, 0.80x speed, 75% volume, 1.0s pause)">
+              🤫 Soft Whisper
+            </button>
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('intense')" title="Set as Screamed / Panicked / High Tension (Fenrir, 1.04x speed, 115% volume, 0.8s pause)">
+              😱 Intense Scream
+            </button>
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('female')" title="Set as Natural Female Character (Heart, 0.86x speed, 100% volume, 0.8s pause)">
+              👩 Female Dialogue
+            </button>
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('male')" title="Set as Distinct Male Character (Michael, 0.88x speed, 100% volume, 0.8s pause)">
+              👨 Male Dialogue
+            </button>
+          </div>
+        </div>
+
+        <!-- Bulk Scope Actions -->
+        <div class="inspector-section">
+          <span class="section-label">Bulk Apply to Story</span>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+            <button class="btn btn-secondary" id="btn-apply-voice-to-all" onclick="handleApplyVoiceToAll()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Set this voice on ALL sentences in your project">
+              🎭 Apply Voice to All Sentences
+            </button>
+            <button class="btn btn-secondary" id="btn-apply-pacing-to-all" onclick="handleApplyPacingToAll()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Set current speed, volume and pause on ALL sentences">
+              ⚡ Apply Pacing/Speed to All
+            </button>
+          </div>
+        </div>
+
+        <!-- Engine Model -->
+        <div class="inspector-section">
+          <span class="section-label">TTS Model</span>
+          <div style="font-size: 13px; color: var(--text-muted); background: var(--bg-card); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            ⚡ Kokoro v0.19 ONNX (Local 82M)
+          </div>
+        </div>
+      </aside>
+
+      <!-- CENTER EDITOR CANVAS -->
+      <main class="editor-canvas">
+        <!-- CANVAS SELECTION TOOLBAR -->
+        <div class="canvas-action-bar" id="canvas-action-bar">
+          <div class="action-bar-left">
+            <button class="action-pill-btn" id="btn-toggle-select-all" onclick="toggleSelectAll()" title="Select or Deselect all sentences in this story">
+              <span id="select-all-icon">☐</span>
+              <span id="select-all-label">Select All</span>
+            </button>
+            <span id="bulk-selection-count-text" class="selection-count-pill" style="display: none;">0 Selected</span>
+          </div>
+          <div class="action-bar-right" id="bulk-action-buttons">
+            <button class="action-pill-btn" id="btn-auto-direct" onclick="handleAutoDirectStory()" title="Auto-detect characters, dialogue quotes, whispers, screaming, and emotional pacing across the entire story">
+              🎭 Auto-Direct Story
+            </button>
+            <button class="action-pill-btn" id="btn-merge-short" onclick="handleMergeShortBlocks()" title="Merge ultra-small consecutive sentences of the same narrator (e.g. 'No network. No emergency lines.') into single blocks">
+              🔗 Merge Short
+            </button>
+            <button class="action-pill-btn" id="btn-auto-split" onclick="handleAutoSplitAll()" title="Split multi-sentence paragraphs into individual sentences for 5x faster rendering">
+              ✂️ Auto-Split Sentences
+            </button>
+            <button class="action-pill-btn primary" id="btn-bulk-change-voice" onclick="openVoiceDrawer()" title="Change voice for selected sentences" style="display: none;">
+              👥 Voice
+            </button>
+            <button class="action-pill-btn" id="btn-bulk-merge" onclick="handleBulkMergeSelected()" title="Merge selected sentences into one single sentence block" style="display: none;">
+              🔗 Merge Selected
+            </button>
+            <button class="action-pill-btn" id="btn-bulk-render" onclick="handleBulkRender()" title="Render only selected sentences sequentially" style="display: none;">
+              ⚡ Render
+            </button>
+            <button class="action-pill-btn danger" id="btn-bulk-delete" onclick="handleBulkDelete()" title="Delete selected sentences" style="display: none;">
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+
+        <div class="story-container" id="story-container">
+          <!-- Sentence rows with text rendered dynamically -->
+        </div>
+        <button class="add-block-btn" id="btn-add-block">＋ Add Sentence Block</button>
+      </main>
+    </div>
+
+    <!-- BOTTOM TIMELINE -->
+    <footer class="bottom-timeline">
+      <div class="timeline-transport">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="transport-btn" id="master-prev-btn" onclick="handleMasterPrev()" title="Previous sentence (⏮)">⏮</button>
+          <button class="play-master-btn" id="master-play-btn" onclick="handleMasterPlayToggle()" title="Play story narrative from selected block (Space)">▶</button>
+          <button class="transport-btn" id="master-next-btn" onclick="handleMasterNext()" title="Next sentence (⏭)">⏭</button>
+          <button class="transport-btn" id="master-stop-btn" onclick="handleMasterStop()" title="Stop & return to start">⏹</button>
+          <span class="time-display" id="master-time-display">0:00 / 0:00</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span id="player-active-sentence-hint" style="font-size: 12px; color: var(--text-muted); max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            Click any sentence or timeline pill below to jump & play
+          </span>
+        </div>
+        <div>
+          <span style="font-size: 11px; color: var(--text-muted);">24kHz High Fidelity</span>
+        </div>
+      </div>
+
+      <div class="timeline-track-container" id="timeline-track">
+        <div class="timeline-blocks-wrapper" id="timeline-blocks">
+          <!-- Colored timeline blocks dynamically populated by JS -->
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ================= VOICE DRAWER MODAL ================= -->
+  <div class="drawer-backdrop" id="voice-drawer">
+    <div class="drawer-window">
+      <div class="drawer-header">
+        <span class="drawer-title">Voice Catalogue</span>
+        <button class="icon-btn" id="drawer-close-btn" style="font-size: 18px;">✕</button>
+      </div>
+
+      <!-- Search & Sort Row -->
+      <div class="search-and-sort-bar">
+        <input type="text" class="search-input" id="drawer-search" placeholder="Search by name, timbre, accent, or genre...">
+        <select class="sort-select" id="drawer-sort">
+          <option value="recommended">Sort: Recommended</option>
+          <option value="name_asc">Sort: Name (A-Z)</option>
+          <option value="deep_first">Sort: Deep Voice First</option>
+          <option value="female_first">Sort: Female First</option>
+          <option value="male_first">Sort: Male First</option>
+        </select>
+      </div>
+
+      <!-- Filter Pills (Clean Wrapped Layout) -->
+      <div class="filter-pills-row">
+        <button class="filter-pill active" data-filter="all">All Voices</button>
+        <button class="filter-pill" data-filter="mystery">🔥 Mystery & Horror</button>
+        <button class="filter-pill" data-filter="blends">🎭 Custom Blends</button>
+        <button class="filter-pill" data-filter="female">Female</button>
+        <button class="filter-pill" data-filter="male">Male</button>
+        <button class="filter-pill" data-filter="american">American</button>
+        <button class="filter-pill" data-filter="british">British</button>
+        <button class="filter-pill" data-filter="hindi">Hindi</button>
+        <button class="filter-pill" data-filter="international">International</button>
+      </div>
+
+      <!-- Voice Cards Body -->
+      <div class="voice-list-body" id="voice-list-body">
+        <!-- Voice cards rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= NEW PROJECT MODAL ================= -->
+  <div class="drawer-backdrop" id="new-project-modal">
+    <div class="drawer-window" style="width: 580px;">
+      <div class="drawer-header">
+        <span class="drawer-title">Create New Story Project</span>
+        <button class="icon-btn" id="new-project-close-btn" onclick="closeNewProjectModal()" style="font-size: 18px;">✕</button>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Project Title</label>
+        <input type="text" id="new-project-title-input" class="search-input" placeholder="e.g. Episode 2: The Radio Tower">
+
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Primary Story Voice (Default Narrator)</label>
+        <select id="new-project-voice-select" class="search-input" style="padding: 10px; background: var(--bg-card); color: var(--text-main);">
+          <!-- Populated dynamically -->
+        </select>
+
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Paste Story Text (Optional)</label>
+        <textarea id="new-project-text-input" rows="7" style="width: 100%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 12px; border-radius: var(--radius-md); font-family: inherit; font-size: 13.5px; resize: none;" placeholder="Paste raw story text here to auto-split into sentences, or leave empty to start blank..."></textarea>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+          <button class="btn btn-secondary" onclick="closeNewProjectModal()">Cancel</button>
+          <button class="btn btn-primary" id="btn-create-project-submit" onclick="handleCreateProjectSubmit()">Create & Open Studio</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= IMPORT TEXT MODAL ================= -->
+  <div class="drawer-backdrop" id="import-modal">
+    <div class="drawer-window" style="width: 580px;">
+      <div class="drawer-header">
+        <span class="drawer-title">Import Text to Current Project</span>
+        <button class="icon-btn" id="import-close-btn" onclick="closeImportModal()" style="font-size: 18px;">✕</button>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="font-size: 13px; color: var(--text-muted);">
+          Paste text below to replace or append sentences in your current project.
+        </p>
+
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Default Narrator Voice for Imported Text</label>
+        <select id="import-voice-select" class="search-input" style="padding: 10px; background: var(--bg-card); color: var(--text-main);">
+          <!-- Populated dynamically -->
+        </select>
+
+        <textarea id="import-textarea" rows="8" style="width: 100%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 12px; border-radius: var(--radius-md); font-family: inherit; font-size: 13.5px; resize: none;" placeholder="Paste text here..."></textarea>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+          <button class="btn btn-primary" id="btn-do-import" onclick="handleDoImport()">Split & Import Sentences</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CLOUD GPU / COLAB MODAL ================= -->
+  <div class="drawer-backdrop" id="colab-modal">
+    <div class="drawer-window" style="width: 640px; max-width: 95vw;">
+      <div class="drawer-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 20px;">🚀</span>
+          <div>
+            <div class="drawer-title">Cloud GPU Acceleration</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Offload synthesis to Google Colab or Kaggle (T4 GPU ~0.2s generation)</div>
+          </div>
+        </div>
+        <button class="icon-btn" id="colab-close-btn" onclick="closeColabModal()" style="font-size: 18px;">✕</button>
+      </div>
+      <div style="padding: 22px; display: flex; flex-direction: column; gap: 16px;">
+        
+        <!-- Active Status Banner -->
+        <div id="colab-status-banner" class="colab-status-banner offline">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="status-indicator-dot" id="banner-dot"></span>
+            <div>
+              <div style="font-weight: 600; font-size: 14px;" id="banner-title">Current Mode: Local CPU Engine</div>
+              <div style="font-size: 12px; color: var(--text-muted);" id="banner-desc">Generating on laptop CPU (~14s per new sentence). Connect Colab for 100x speed!</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Worker URL Input -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Cloudflare Tunnel / Worker URL</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="colab-url-input" class="search-input" placeholder="https://random-words.trycloudflare.com" style="flex: 1;">
+            <button class="btn btn-secondary" id="btn-test-colab" onclick="handleTestColab()" style="white-space: nowrap;">⚡ Test Connection</button>
+          </div>
+          <div id="colab-test-result" style="font-size: 12px; min-height: 18px;"></div>
+        </div>
+
+        <!-- Quick Colab Instructions & Copy Code -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 13px; font-weight: 600; color: var(--text-main);">1-Click Colab / Kaggle Setup:</span>
+            <button class="btn btn-secondary" id="btn-copy-colab-code" onclick="handleCopyColabScript()" style="padding: 4px 10px; font-size: 12px;">📋 Copy Colab Script</button>
+          </div>
+          <ol style="font-size: 12.5px; color: var(--text-muted); margin: 0; padding-left: 20px; line-height: 1.6;">
+            <li>Open a free <a href="https://colab.research.google.com" target="_blank" style="color: var(--primary); text-decoration: underline;">Google Colab notebook</a>.</li>
+            <li>In the top menu: <strong>Runtime → Change runtime type</strong> and select <strong>T4 GPU</strong>.</li>
+            <li>Paste the 1-cell script, press <strong>Run</strong>, then copy the <code>https://*.trycloudflare.com</code> URL it gives you!</li>
+          </ol>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+          <button class="btn btn-secondary" id="btn-clear-colab" onclick="handleClearColab()" style="color: var(--danger);">Disconnect (Use Local CPU)</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" onclick="closeColabModal()">Close</button>
+            <button class="btn btn-primary" id="btn-save-colab" onclick="handleSaveColab()">Save & Activate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="studio-toast" class="studio-toast"></div>
+  <script src="/studio/js/app.js?v=360"></script>
+</body>
+</html>

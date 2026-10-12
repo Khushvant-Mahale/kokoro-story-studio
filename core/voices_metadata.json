@@ -1,0 +1,689 @@
+[
+  {
+    "id": "blend_fenrir_onyx",
+    "name": "Gritty Dark Thriller (Fenrir + Onyx)",
+    "is_blend": true,
+    "blend_weights": {
+      "am_fenrir": 0.6,
+      "am_onyx": 0.4
+    },
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Deep, Gravelly, Ominous Baritone",
+    "genre": [
+      "Mystery",
+      "Horror",
+      "Thriller",
+      "Noir"
+    ],
+    "badge": "FO",
+    "color": "#ea580c",
+    "sample_url": "/api/audio/sample_blend_fenrir_onyx.wav"
+  },
+  {
+    "id": "blend_adam_onyx",
+    "name": "Psychological Suspense (Adam + Onyx)",
+    "is_blend": true,
+    "blend_weights": {
+      "am_adam": 0.65,
+      "am_onyx": 0.35
+    },
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Articulate, Deep Resonance, Controlled Tension",
+    "genre": [
+      "Mystery",
+      "Thriller",
+      "True Crime"
+    ],
+    "badge": "AO",
+    "color": "#3b82f6",
+    "sample_url": "/api/audio/sample_blend_adam_onyx.wav"
+  },
+  {
+    "id": "blend_george_onyx",
+    "name": "British Gothic Mystery (George + Onyx)",
+    "is_blend": true,
+    "blend_weights": {
+      "bm_george": 0.7,
+      "am_onyx": 0.3
+    },
+    "gender": "Male",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Chilling, Distinguished, Archival Investigator",
+    "genre": [
+      "Mystery",
+      "Gothic",
+      "Historical",
+      "Supernatural"
+    ],
+    "badge": "GO",
+    "color": "#8b5cf6",
+    "sample_url": "/api/audio/sample_blend_george_onyx.wav"
+  },
+  {
+    "id": "am_fenrir",
+    "name": "Fenrir - Gritty Baritone",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Rough, Intense, Dark Undertone",
+    "genre": [
+      "Horror",
+      "Thriller",
+      "Apocalyptic"
+    ],
+    "badge": "FE",
+    "color": "#b91c1c",
+    "sample_url": "/api/audio/sample_am_fenrir.wav"
+  },
+  {
+    "id": "am_onyx",
+    "name": "Onyx - Deep Bass Baritone",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Heavy Resonance, Low Sub-Bass, Menacing",
+    "genre": [
+      "Horror",
+      "Supernatural",
+      "Movie Trailer"
+    ],
+    "badge": "ON",
+    "color": "#475569",
+    "sample_url": "/api/audio/sample_am_onyx.wav"
+  },
+  {
+    "id": "am_adam",
+    "name": "Adam - Narrative Lead",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Clear, Natural, Engaging Storyteller",
+    "genre": [
+      "Documentary",
+      "Audiobook",
+      "Thriller"
+    ],
+    "badge": "AD",
+    "color": "#2563eb",
+    "sample_url": "/api/audio/sample_am_adam.wav"
+  },
+  {
+    "id": "am_michael",
+    "name": "Michael - Mature Narrator",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Authoritative, Steady, Measured",
+    "genre": [
+      "Investigative",
+      "Documentary",
+      "History"
+    ],
+    "badge": "MI",
+    "color": "#0284c7",
+    "sample_url": "/api/audio/sample_am_michael.wav"
+  },
+  {
+    "id": "am_echo",
+    "name": "Echo - Atmospheric Narrative",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Calm, Soft Pacing, Contemplative",
+    "genre": [
+      "Sci-Fi",
+      "Mystery",
+      "Philosophy"
+    ],
+    "badge": "EC",
+    "color": "#059669",
+    "sample_url": "/api/audio/sample_am_echo.wav"
+  },
+  {
+    "id": "am_eric",
+    "name": "Eric - Grounded Conversational",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Modern, Relatable, Natural Tone",
+    "genre": [
+      "Podcast",
+      "Storytelling",
+      "Drama"
+    ],
+    "badge": "ER",
+    "color": "#0d9488",
+    "sample_url": "/api/audio/sample_am_eric.wav"
+  },
+  {
+    "id": "am_liam",
+    "name": "Liam - Smooth American",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Warm, Polished, Neutral",
+    "genre": [
+      "Audiobook",
+      "Narration"
+    ],
+    "badge": "LI",
+    "color": "#16a34a",
+    "sample_url": "/api/audio/sample_am_liam.wav"
+  },
+  {
+    "id": "am_puck",
+    "name": "Puck - Youthful Character",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "High Energy, Youthful, Expressive",
+    "genre": [
+      "Character",
+      "Dialogue",
+      "Adventure"
+    ],
+    "badge": "PU",
+    "color": "#d97706",
+    "sample_url": "/api/audio/sample_am_puck.wav"
+  },
+  {
+    "id": "am_santa",
+    "name": "Santa - Weathered Character",
+    "gender": "Male",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Aged, Raspy, Low Pitch",
+    "genre": [
+      "Fantasy",
+      "Folklore",
+      "Older Character"
+    ],
+    "badge": "SA",
+    "color": "#dc2626",
+    "sample_url": "/api/audio/sample_am_santa.wav"
+  },
+  {
+    "id": "af_heart",
+    "name": "Heart - Natural Expressive",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Emotional, Breathy, Nuanced & Realistic",
+    "genre": [
+      "Drama",
+      "Audiobook",
+      "Horror Dialogue"
+    ],
+    "badge": "HE",
+    "color": "#ec4899",
+    "sample_url": "/api/audio/sample_af_heart.wav"
+  },
+  {
+    "id": "af_river",
+    "name": "River - Breathy & Ghostly",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Soft, Intimate, Breathy Whisper",
+    "genre": [
+      "Supernatural",
+      "Whispers",
+      "Psychological"
+    ],
+    "badge": "RI",
+    "color": "#06b6d4",
+    "sample_url": "/api/audio/sample_af_river.wav"
+  },
+  {
+    "id": "af_nicole",
+    "name": "Nicole - Deep Drama",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Deep Female Baritone, Serious, Chilling",
+    "genre": [
+      "Mystery",
+      "Crime",
+      "Dark Drama"
+    ],
+    "badge": "NI",
+    "color": "#a855f7",
+    "sample_url": "/api/audio/sample_af_nicole.wav"
+  },
+  {
+    "id": "af_bella",
+    "name": "Bella - Bright & Articulate",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Crisp, Clear Diction, Confident",
+    "genre": [
+      "Documentary",
+      "Educational",
+      "Dialogue"
+    ],
+    "badge": "BE",
+    "color": "#f43f5e",
+    "sample_url": "/api/audio/sample_af_bella.wav"
+  },
+  {
+    "id": "af_sarah",
+    "name": "Sarah - Classic Storyteller",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Balanced, Poised, Warm Audio Narrator",
+    "genre": [
+      "Audiobook",
+      "Fiction",
+      "Mystery"
+    ],
+    "badge": "SA",
+    "color": "#e11d48",
+    "sample_url": "/api/audio/sample_af_sarah.wav"
+  },
+  {
+    "id": "af_alloy",
+    "name": "Alloy - Balanced Neutral",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Clear, Controlled, Standard",
+    "genre": [
+      "Commercial",
+      "Narration"
+    ],
+    "badge": "AL",
+    "color": "#64748b",
+    "sample_url": "/api/audio/sample_af_alloy.wav"
+  },
+  {
+    "id": "af_aoede",
+    "name": "Aoede - Gentle & Melodic",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Soft, Musical, Calm",
+    "genre": [
+      "Folklore",
+      "Fantasy",
+      "Eerie Calm"
+    ],
+    "badge": "AO",
+    "color": "#8b5cf6",
+    "sample_url": "/api/audio/sample_af_aoede.wav"
+  },
+  {
+    "id": "af_jessica",
+    "name": "Jessica - Friendly & Natural",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Casual, Everyday Conversation",
+    "genre": [
+      "Podcast",
+      "Modern Dialogue"
+    ],
+    "badge": "JE",
+    "color": "#f97316",
+    "sample_url": "/api/audio/sample_af_jessica.wav"
+  },
+  {
+    "id": "af_kore",
+    "name": "Kore - Stern & Composed",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Cold, Authoritative, Serious",
+    "genre": [
+      "Thriller",
+      "Sci-Fi",
+      "Military/Authority"
+    ],
+    "badge": "KO",
+    "color": "#6d28d9",
+    "sample_url": "/api/audio/sample_af_kore.wav"
+  },
+  {
+    "id": "af_nova",
+    "name": "Nova - Dynamic Presenter",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Sharp, Engaging, High Focus",
+    "genre": [
+      "Documentary",
+      "True Crime"
+    ],
+    "badge": "NO",
+    "color": "#0ea5e9",
+    "sample_url": "/api/audio/sample_af_nova.wav"
+  },
+  {
+    "id": "af_sky",
+    "name": "Sky - Ethereal & Light",
+    "gender": "Female",
+    "accent": "American",
+    "flag": "🇺🇸",
+    "timbre": "Airy, Dreamlike, Frail",
+    "genre": [
+      "Poetry",
+      "Tragedy",
+      "Eerie"
+    ],
+    "badge": "SK",
+    "color": "#38bdf8",
+    "sample_url": "/api/audio/sample_af_sky.wav"
+  },
+  {
+    "id": "bm_george",
+    "name": "George - British Investigator",
+    "gender": "Male",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Distinguished, Cold, BBC Mystery Archival",
+    "genre": [
+      "Mystery",
+      "Documentary",
+      "Lovecraftian"
+    ],
+    "badge": "GE",
+    "color": "#4338ca",
+    "sample_url": "/api/audio/sample_bm_george.wav"
+  },
+  {
+    "id": "bm_fable",
+    "name": "Fable - Gothic Storyteller",
+    "gender": "Male",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Theatrical, Dark Tale, Grimm Tone",
+    "genre": [
+      "Gothic",
+      "Dark Fantasy",
+      "Victorian Horror"
+    ],
+    "badge": "FA",
+    "color": "#7c3aed",
+    "sample_url": "/api/audio/sample_bm_fable.wav"
+  },
+  {
+    "id": "bm_lewis",
+    "name": "Lewis - Clinical Observation",
+    "gender": "Male",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Scientific, Measured, Detached",
+    "genre": [
+      "Sci-Fi",
+      "Forensics",
+      "Thriller"
+    ],
+    "badge": "LE",
+    "color": "#4f46e5",
+    "sample_url": "/api/audio/sample_bm_lewis.wav"
+  },
+  {
+    "id": "bm_daniel",
+    "name": "Daniel - Classic English",
+    "gender": "Male",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Warm, Articulate British Male",
+    "genre": [
+      "Classic Fiction",
+      "Audiobook"
+    ],
+    "badge": "DA",
+    "color": "#2563eb",
+    "sample_url": "/api/audio/sample_bm_daniel.wav"
+  },
+  {
+    "id": "bf_emma",
+    "name": "Emma - Investigative British",
+    "gender": "Female",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Crisp, Inquisitive, Sharp",
+    "genre": [
+      "True Crime",
+      "Documentary",
+      "Mystery"
+    ],
+    "badge": "EM",
+    "color": "#9333ea",
+    "sample_url": "/api/audio/sample_bf_emma.wav"
+  },
+  {
+    "id": "bf_alice",
+    "name": "Alice - Poised British Storyteller",
+    "gender": "Female",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Elegant, Classic Literary English",
+    "genre": [
+      "Period Drama",
+      "Audiobook"
+    ],
+    "badge": "AL",
+    "color": "#c026d3",
+    "sample_url": "/api/audio/sample_bf_alice.wav"
+  },
+  {
+    "id": "bf_isabella",
+    "name": "Isabella - Dramatic Literary",
+    "gender": "Female",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Intense, High Emotional Range",
+    "genre": [
+      "Gothic",
+      "Psychological Drama"
+    ],
+    "badge": "IS",
+    "color": "#db2777",
+    "sample_url": "/api/audio/sample_bf_isabella.wav"
+  },
+  {
+    "id": "bf_lily",
+    "name": "Lily - Soft Suspense",
+    "gender": "Female",
+    "accent": "British",
+    "flag": "🇬🇧",
+    "timbre": "Gentle, Vulnerable, Tense",
+    "genre": [
+      "Thriller Dialogue",
+      "Suspense"
+    ],
+    "badge": "LI",
+    "color": "#f472b6",
+    "sample_url": "/api/audio/sample_bf_lily.wav"
+  },
+  {
+    "id": "hf_alpha",
+    "name": "Alpha - Hindi Female",
+    "gender": "Female",
+    "accent": "Hindi",
+    "flag": "🇮🇳",
+    "timbre": "Expressive Hindi Voice",
+    "genre": [
+      "Hindi Storytelling"
+    ],
+    "badge": "HA",
+    "color": "#ea580c",
+    "sample_url": "/api/audio/sample_hf_alpha.wav"
+  },
+  {
+    "id": "hf_beta",
+    "name": "Beta - Hindi Female",
+    "gender": "Female",
+    "accent": "Hindi",
+    "flag": "🇮🇳",
+    "timbre": "Warm Hindi Female",
+    "genre": [
+      "Hindi Narration"
+    ],
+    "badge": "HB",
+    "color": "#f97316",
+    "sample_url": "/api/audio/sample_hf_beta.wav"
+  },
+  {
+    "id": "hm_omega",
+    "name": "Omega - Hindi Male",
+    "gender": "Male",
+    "accent": "Hindi",
+    "flag": "🇮🇳",
+    "timbre": "Deep Hindi Narrator",
+    "genre": [
+      "Hindi Mystery / Story"
+    ],
+    "badge": "HO",
+    "color": "#c2410c",
+    "sample_url": "/api/audio/sample_hm_omega.wav"
+  },
+  {
+    "id": "hm_psi",
+    "name": "Psi - Hindi Male",
+    "gender": "Male",
+    "accent": "Hindi",
+    "flag": "🇮🇳",
+    "timbre": "Clear Hindi Male Voice",
+    "genre": [
+      "Hindi Narration"
+    ],
+    "badge": "HP",
+    "color": "#9a3412",
+    "sample_url": "/api/audio/sample_hm_psi.wav"
+  },
+  {
+    "id": "ef_dora",
+    "name": "Dora - Spanish Female",
+    "gender": "Female",
+    "accent": "Spanish",
+    "flag": "🇪🇸",
+    "timbre": "Natural Spanish Female",
+    "genre": [
+      "Spanish Narration"
+    ],
+    "badge": "ED",
+    "color": "#dc2626",
+    "sample_url": "/api/audio/sample_ef_dora.wav"
+  },
+  {
+    "id": "em_alex",
+    "name": "Alex - Spanish Male",
+    "gender": "Male",
+    "accent": "Spanish",
+    "flag": "🇪🇸",
+    "timbre": "Clear Spanish Narrator",
+    "genre": [
+      "Spanish Storytelling"
+    ],
+    "badge": "EA",
+    "color": "#b91c1c",
+    "sample_url": "/api/audio/sample_em_alex.wav"
+  },
+  {
+    "id": "ff_siwis",
+    "name": "Siwis - French Female",
+    "gender": "Female",
+    "accent": "French",
+    "flag": "🇫🇷",
+    "timbre": "Graceful French Diction",
+    "genre": [
+      "French Narration"
+    ],
+    "badge": "FS",
+    "color": "#2563eb",
+    "sample_url": "/api/audio/sample_ff_siwis.wav"
+  },
+  {
+    "id": "if_sara",
+    "name": "Sara - Italian Female",
+    "gender": "Female",
+    "accent": "Italian",
+    "flag": "🇮🇹",
+    "timbre": "Expressive Italian Female",
+    "genre": [
+      "Italian Storytelling"
+    ],
+    "badge": "IS",
+    "color": "#16a34a",
+    "sample_url": "/api/audio/sample_if_sara.wav"
+  },
+  {
+    "id": "im_nicola",
+    "name": "Nicola - Italian Male",
+    "gender": "Male",
+    "accent": "Italian",
+    "flag": "🇮🇹",
+    "timbre": "Deep Italian Male",
+    "genre": [
+      "Italian Narration"
+    ],
+    "badge": "IN",
+    "color": "#15803d",
+    "sample_url": "/api/audio/sample_im_nicola.wav"
+  },
+  {
+    "id": "jf_alpha",
+    "name": "Alpha - Japanese Female",
+    "gender": "Female",
+    "accent": "Japanese",
+    "flag": "🇯🇵",
+    "timbre": "Natural Japanese Voice",
+    "genre": [
+      "Japanese Narration"
+    ],
+    "badge": "JA",
+    "color": "#e11d48",
+    "sample_url": "/api/audio/sample_jf_alpha.wav"
+  },
+  {
+    "id": "jm_kumo",
+    "name": "Kumo - Japanese Male",
+    "gender": "Male",
+    "accent": "Japanese",
+    "flag": "🇯🇵",
+    "timbre": "Deep Japanese Narrator",
+    "genre": [
+      "Japanese Storytelling"
+    ],
+    "badge": "JK",
+    "color": "#be123c",
+    "sample_url": "/api/audio/sample_jm_kumo.wav"
+  },
+  {
+    "id": "zf_xiaobei",
+    "name": "Xiaobei - Chinese Female",
+    "gender": "Female",
+    "accent": "Chinese",
+    "flag": "🇨🇳",
+    "timbre": "Articulate Mandarin",
+    "genre": [
+      "Mandarin Storytelling"
+    ],
+    "badge": "ZX",
+    "color": "#b91c1c",
+    "sample_url": "/api/audio/sample_zf_xiaobei.wav"
+  },
+  {
+    "id": "zm_yunjian",
+    "name": "Yunjian - Chinese Male",
+    "gender": "Male",
+    "accent": "Chinese",
+    "flag": "🇨🇳",
+    "timbre": "Resonant Mandarin Narrator",
+    "genre": [
+      "Mandarin Audio Drama"
+    ],
+    "badge": "ZY",
+    "color": "#991b1b",
+    "sample_url": "/api/audio/sample_zm_yunjian.wav"
+  }
+]
