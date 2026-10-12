@@ -235,9 +235,36 @@ function renderDashboard() {
     <div style="font-size: 12px; color: var(--text-subtle);">Type or paste a manuscript to auto-chunk</div>
   `;
   newCard.addEventListener("click", () => {
-    document.getElementById("new-project-modal").classList.add("active");
+    openNewProjectModal();
   });
   grid.appendChild(newCard);
+
+  // 1b. "Import Story File" Card
+  const importCard = document.createElement("div");
+  importCard.className = "project-card project-card-import";
+  importCard.innerHTML = `
+    <div class="import-icon">📥</div>
+    <div style="font-weight: 700; font-size: 15px; color: #fff;">Import Story File</div>
+    <div style="font-size: 12px; color: var(--text-subtle);">Click or drop .txt, .md, or project .json</div>
+  `;
+  importCard.addEventListener("click", () => {
+    document.getElementById("dashboard-file-input")?.click();
+  });
+  importCard.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    importCard.classList.add("drag-over");
+  });
+  importCard.addEventListener("dragleave", () => {
+    importCard.classList.remove("drag-over");
+  });
+  importCard.addEventListener("drop", (e) => {
+    e.preventDefault();
+    importCard.classList.remove("drag-over");
+    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+      processImportedFile(e.dataTransfer.files[0], "dashboard");
+    }
+  });
+  grid.appendChild(importCard);
 
   // 2. Existing Project Cards
   state.projects.forEach(p => {
@@ -1813,7 +1840,17 @@ function assignVoiceToTarget(voice) {
   showToast(`✓ Applied voice "${voice.name}" to ${targets.length} sentence(s)!`);
 }
 
-// ---------------- PROJECT CREATION MODAL ---------------- //
+// ---------------- PROJECT CREATION & FILE IMPORT MODAL ---------------- //
+
+function cleanTitleFromFilename(filename) {
+  if (!filename) return "New Story Project";
+  let base = filename.replace(/\.[^/.]+$/, "");
+  base = base.replace(/[_]/g, " ").trim();
+  if (base.length > 0 && (base === base.toUpperCase() || base === base.toLowerCase())) {
+    base = base.replace(/\b\w/g, l => l.toUpperCase());
+  }
+  return base || "New Story Project";
+}
 
 function openNewProjectModal() {
   const modal = document.getElementById("new-project-modal");
@@ -1821,7 +1858,7 @@ function openNewProjectModal() {
   modal.classList.add("active");
   populateVoiceSelects();
   const input = document.getElementById("new-project-title-input");
-  if (input) {
+  if (input && !input.value.trim()) {
     input.value = "New Story Project";
     input.focus();
   }
@@ -1830,6 +1867,131 @@ function openNewProjectModal() {
 function closeNewProjectModal() {
   const modal = document.getElementById("new-project-modal");
   if (modal) modal.classList.remove("active");
+  clearNewProjectFile();
+}
+
+function clearNewProjectFile() {
+  const fileInput = document.getElementById("new-project-file-input");
+  if (fileInput) fileInput.value = "";
+  const badge = document.getElementById("new-project-file-badge");
+  if (badge) badge.style.display = "none";
+}
+
+function handleDashboardFileImport(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  processImportedFile(file, "dashboard");
+  e.target.value = "";
+}
+
+function handleNewProjectFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  processImportedFile(file, "new_project_modal");
+  e.target.value = "";
+}
+
+function handleImportModalFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const text = event.target.result;
+    const textarea = document.getElementById("import-textarea");
+    if (textarea) textarea.value = text;
+    showToast(`✓ Loaded "${file.name}" (${(text.length / 1024).toFixed(1)} KB)`);
+  };
+  reader.readAsText(file, "UTF-8");
+  e.target.value = "";
+}
+
+async function loadSampleIntoNewProject() {
+  try {
+    showToast("📚 Loading sample story...");
+    const res = await fetch("/api/sample_story");
+    if (!res.ok) throw new Error("Could not fetch sample story");
+    const data = await res.json();
+
+    const titleInput = document.getElementById("new-project-title-input");
+    const textInput = document.getElementById("new-project-text-input");
+    const badge = document.getElementById("new-project-file-badge");
+    const nameSpan = document.getElementById("new-project-file-name");
+
+    if (titleInput) titleInput.value = data.title || "The Endless Eclipse - Sample";
+    if (textInput) textInput.value = data.text || "";
+    if (badge && nameSpan) {
+      nameSpan.textContent = "📚 THE ENDLESS ECLIPSE - Sample.txt";
+      badge.style.display = "flex";
+    }
+    showToast("✓ Loaded sample story: The Endless Eclipse");
+  } catch (err) {
+    showToast("❌ Failed to load sample story: " + err.message);
+  }
+}
+
+function processImportedFile(file, targetContext) {
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    const content = event.target.result;
+    const isJson = file.name.toLowerCase().endsWith(".json");
+
+    if (isJson) {
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed.blocks && Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
+          showToast(`📥 Importing project JSON "${parsed.title || file.name}"...`);
+          const title = parsed.title || cleanTitleFromFilename(file.name);
+          const defaultVoice = parsed.default_voice || "blend_fenrir_onyx";
+          const res = await fetch("/api/projects/new", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: title,
+              default_voice: defaultVoice,
+              blocks: parsed.blocks
+            })
+          });
+          const newProj = await res.json();
+          if (newProj && newProj.id) {
+            closeNewProjectModal();
+            openProject(newProj.id);
+            showToast(`✓ Project "${title}" imported with ${parsed.blocks.length} sentences!`);
+            return;
+          }
+        } else if (parsed.text) {
+          applyTextToFileModal(parsed.title || cleanTitleFromFilename(file.name), parsed.text, file.name);
+          return;
+        }
+      } catch (jsonErr) {
+        console.warn("JSON parse error, falling back to raw text:", jsonErr);
+      }
+    }
+
+    const inferredTitle = cleanTitleFromFilename(file.name);
+    applyTextToFileModal(inferredTitle, content, file.name);
+  };
+  reader.readAsText(file, "UTF-8");
+}
+
+function applyTextToFileModal(title, text, fileName) {
+  const titleInput = document.getElementById("new-project-title-input");
+  const textInput = document.getElementById("new-project-text-input");
+  const badge = document.getElementById("new-project-file-badge");
+  const nameSpan = document.getElementById("new-project-file-name");
+
+  if (titleInput) titleInput.value = title;
+  if (textInput) textInput.value = text;
+  if (badge && nameSpan) {
+    nameSpan.textContent = `📄 ${fileName}`;
+    badge.style.display = "flex";
+  }
+
+  const modal = document.getElementById("new-project-modal");
+  if (modal && !modal.classList.contains("active")) {
+    modal.classList.add("active");
+    populateVoiceSelects();
+  }
+  showToast(`✓ Loaded "${fileName}" (${(text.length / 1024).toFixed(1)} KB)`);
 }
 
 async function handleCreateProjectSubmit() {
@@ -2292,6 +2454,64 @@ function setupEventListeners() {
       if (e.target.id === "colab-modal") closeColabModal();
     });
   }
+
+  const newProjModal = document.getElementById("new-project-modal");
+  if (newProjModal) {
+    newProjModal.addEventListener("click", (e) => {
+      if (e.target.id === "new-project-modal") closeNewProjectModal();
+    });
+  }
+
+  const importModal = document.getElementById("import-modal");
+  if (importModal) {
+    importModal.addEventListener("click", (e) => {
+      if (e.target.id === "import-modal") closeImportModal();
+    });
+  }
+
+  // Drag and drop for new project textarea
+  const newProjTextarea = document.getElementById("new-project-text-input");
+  if (newProjTextarea) {
+    newProjTextarea.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      newProjTextarea.classList.add("drag-over");
+    });
+    newProjTextarea.addEventListener("dragleave", () => {
+      newProjTextarea.classList.remove("drag-over");
+    });
+    newProjTextarea.addEventListener("drop", (e) => {
+      e.preventDefault();
+      newProjTextarea.classList.remove("drag-over");
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        processImportedFile(e.dataTransfer.files[0], "new_project_modal");
+      }
+    });
+  }
+
+  // Drag and drop for studio import textarea
+  const importTextarea = document.getElementById("import-textarea");
+  if (importTextarea) {
+    importTextarea.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      importTextarea.classList.add("drag-over");
+    });
+    importTextarea.addEventListener("dragleave", () => {
+      importTextarea.classList.remove("drag-over");
+    });
+    importTextarea.addEventListener("drop", (e) => {
+      e.preventDefault();
+      importTextarea.classList.remove("drag-over");
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          importTextarea.value = evt.target.result;
+          showToast(`✓ Loaded "${file.name}"`);
+        };
+        reader.readAsText(file, "UTF-8");
+      }
+    });
+  }
 }
 
 function splitTextIntoSentences(text) {
@@ -2452,3 +2672,10 @@ window.handleMasterPrev = handleMasterPrev;
 window.handleMasterNext = handleMasterNext;
 window.handleMasterStop = handleMasterStop;
 window.playBlockAudio = playBlockAudio;
+window.handleDashboardFileImport = handleDashboardFileImport;
+window.handleNewProjectFile = handleNewProjectFile;
+window.loadSampleIntoNewProject = loadSampleIntoNewProject;
+window.clearNewProjectFile = clearNewProjectFile;
+window.handleImportModalFile = handleImportModalFile;
+window.processImportedFile = processImportedFile;
+window.cleanTitleFromFilename = cleanTitleFromFilename;

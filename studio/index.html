@@ -6,7 +6,7 @@
   <title>Kokoro Story Studio — Dashboard & Dynamic TTS</title>
   <link rel="icon" type="image/svg+xml" href="/studio/favicon.svg">
   <link rel="alternate icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/studio/css/studio.css?v=360">
+  <link rel="stylesheet" href="/studio/css/studio.css?v=370">
 </head>
 <body>
 
@@ -23,7 +23,9 @@
           <span class="engine-label">⚡ Local CPU Engine</span>
           <span class="engine-config-tag">⚙️</span>
         </button>
+        <button class="btn btn-secondary" id="btn-dashboard-import-top" onclick="document.getElementById('dashboard-file-input').click()" title="Import text file (.txt, .md) or project JSON (.json)">📥 Import File</button>
         <button class="btn btn-primary" id="btn-create-project-top" onclick="openNewProjectModal()">＋ New Story Project</button>
+        <input type="file" id="dashboard-file-input" accept=".txt,.md,.json" style="display: none;" onchange="handleDashboardFileImport(event)">
       </div>
     </header>
 
@@ -317,8 +319,23 @@
           <!-- Populated dynamically -->
         </select>
 
-        <label style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Paste Story Text (Optional)</label>
-        <textarea id="new-project-text-input" rows="7" style="width: 100%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 12px; border-radius: var(--radius-md); font-family: inherit; font-size: 13.5px; resize: none;" placeholder="Paste raw story text here to auto-split into sentences, or leave empty to start blank..."></textarea>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin: 0;">Story Text (Paste or Import)</label>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="action-pill-btn" onclick="document.getElementById('new-project-file-input').click()" style="padding: 4px 10px; font-size: 11.5px; border-radius: 6px;" title="Browse and upload a .txt, .md, or .json file">
+              📁 Choose File (.txt, .md, .json)
+            </button>
+            <button type="button" class="action-pill-btn" onclick="loadSampleIntoNewProject()" style="padding: 4px 10px; font-size: 11.5px; border-radius: 6px;" title="Load sample story 'The Endless Eclipse'">
+              📚 Load Sample Story
+            </button>
+          </div>
+        </div>
+        <input type="file" id="new-project-file-input" accept=".txt,.md,.json" style="display: none;" onchange="handleNewProjectFile(event)">
+        <div id="new-project-file-badge" style="display: none; padding: 6px 12px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 6px; font-size: 12px; color: #93c5fd; align-items: center; justify-content: space-between;">
+          <span id="new-project-file-name">📄 filename.txt</span>
+          <button type="button" class="icon-btn" onclick="clearNewProjectFile()" style="font-size: 12px; color: var(--text-muted); padding: 2px 6px;">✕</button>
+        </div>
+        <textarea id="new-project-text-input" rows="7" style="width: 100%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 12px; border-radius: var(--radius-md); font-family: inherit; font-size: 13.5px; resize: none; transition: border-color 0.2s;" placeholder="Paste raw story text here, drop a file, or click 'Choose File' / 'Load Sample Story'..."></textarea>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
           <button class="btn btn-secondary" onclick="closeNewProjectModal()">Cancel</button>
@@ -336,16 +353,22 @@
         <button class="icon-btn" id="import-close-btn" onclick="closeImportModal()" style="font-size: 18px;">✕</button>
       </div>
       <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
-        <p style="font-size: 13px; color: var(--text-muted);">
-          Paste text below to replace or append sentences in your current project.
-        </p>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
+            Paste text or choose a file to split into sentences in current project.
+          </p>
+          <button type="button" class="action-pill-btn" onclick="document.getElementById('import-modal-file-input').click()" style="padding: 4px 10px; font-size: 11.5px; border-radius: 6px; white-space: nowrap;" title="Browse and upload a .txt or .md file">
+            📁 Browse File (.txt, .md)
+          </button>
+        </div>
+        <input type="file" id="import-modal-file-input" accept=".txt,.md" style="display: none;" onchange="handleImportModalFile(event)">
 
         <label style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Default Narrator Voice for Imported Text</label>
         <select id="import-voice-select" class="search-input" style="padding: 10px; background: var(--bg-card); color: var(--text-main);">
           <!-- Populated dynamically -->
         </select>
 
-        <textarea id="import-textarea" rows="8" style="width: 100%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 12px; border-radius: var(--radius-md); font-family: inherit; font-size: 13.5px; resize: none;" placeholder="Paste text here..."></textarea>
+        <textarea id="import-textarea" rows="8" style="width: 100%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 12px; border-radius: var(--radius-md); font-family: inherit; font-size: 13.5px; resize: none; transition: border-color 0.2s;" placeholder="Paste text here or drop a file..."></textarea>
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
           <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
           <button class="btn btn-primary" id="btn-do-import" onclick="handleDoImport()">Split & Import Sentences</button>
@@ -416,6 +439,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=360"></script>
+  <script src="/studio/js/app.js?v=370"></script>
 </body>
 </html>

@@ -170,7 +170,9 @@ async def handle_create_project(request):
     proj_id = f"proj_{uuid.uuid4().hex[:8]}"
     
     blocks = []
-    if raw_text:
+    if "blocks" in data and isinstance(data["blocks"], list) and len(data["blocks"]) > 0:
+        blocks = data["blocks"]
+    elif raw_text:
         blocks = project_mgr.split_text_into_blocks(raw_text, default_voice=default_voice)
     else:
         blocks = [{
@@ -323,6 +325,20 @@ async def handle_get_colab_script(request):
     return web.Response(text="# Colab worker script not found", status=404)
 
 
+async def handle_get_sample_story(request):
+    sample_file = BASE_DIR / "input" / "THE ENDLESS ECLIPSE - Sample.txt"
+    if not sample_file.exists():
+        sample_file = BASE_DIR / "input" / "THE ENDLESS ECLIPSE.txt"
+    if sample_file.exists():
+        with open(sample_file, "r", encoding="utf-8-sig") as f:
+            content = f.read()
+        return web.json_response({
+            "title": "The Endless Eclipse - Sample",
+            "text": content
+        })
+    return web.json_response({"error": "Sample file not found"}, status=404)
+
+
 async def handle_favicon(request):
     fav_file = STUDIO_DIR / "favicon.svg"
     if fav_file.exists():
@@ -355,6 +371,7 @@ def create_app():
     app.router.add_post("/api/config", handle_save_config)
     app.router.add_post("/api/test_remote", handle_test_remote)
     app.router.add_get("/api/colab_script", handle_get_colab_script)
+    app.router.add_get("/api/sample_story", handle_get_sample_story)
 
     # Static assets
     app.router.add_static("/studio", STUDIO_DIR)
