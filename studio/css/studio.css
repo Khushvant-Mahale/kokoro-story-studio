@@ -377,13 +377,15 @@ textarea.drag-over {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 0;
-  gap: 16px;
+  padding: 12px 0;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 5;
 }
 
 .rail-btn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -393,13 +395,15 @@ textarea.drag-over {
   cursor: pointer;
   background: transparent;
   border: none;
-  font-size: 18px;
+  font-size: 16px;
+  transition: all 0.15s ease;
 }
 
 .rail-btn span {
   font-size: 9px;
   margin-top: 2px;
   font-weight: 600;
+  letter-spacing: 0.2px;
 }
 
 .rail-btn:hover {
@@ -410,23 +414,105 @@ textarea.drag-over {
 .rail-btn.active {
   background-color: var(--accent-light);
   color: var(--accent);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.25);
+}
+
+.rail-nav-divider {
+  width: 28px;
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 2px 0;
 }
 
 /* Left Inspector */
 .inspector-panel {
-  width: 290px;
+  width: 300px;
   background-color: var(--bg-surface);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  flex-shrink: 0;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+.inspector-panel.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  border-right: none !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .panel-header {
-  padding: 16px;
-  font-size: 14px;
+  padding: 14px 16px;
+  font-size: 13.5px;
   font-weight: 700;
   border-bottom: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+/* Inspector Tabs Bar */
+.inspector-tabs-bar {
+  display: flex;
+  background-color: rgba(15, 23, 42, 0.5);
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 10px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.inspector-tab-pill {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  white-space: nowrap;
+}
+
+.inspector-tab-pill:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.inspector-tab-pill.active {
+  color: #fff;
+  background: var(--primary);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.inspector-tab-pane {
+  display: none;
+  flex-direction: column;
+  animation: tabFadeIn 0.18s ease-out;
+}
+
+.inspector-tab-pane.active {
+  display: flex;
+}
+
+@keyframes tabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .inspector-section {

@@ -4663,4 +4663,65 @@ window.renameCharacter = renameCharacter;
 window.deleteCharacter = deleteCharacter;
 window.renderSavedCharactersList = renderSavedCharactersList;
 
+// ---------------- INSPECTOR TAB NAVIGATION & CONTROLS ---------------- //
+
+function switchInspectorTab(tabName) {
+  if (!tabName) tabName = "audio";
+  state.currentInspectorTab = tabName;
+
+  // Uncollapse panel if collapsed
+  const panel = document.getElementById("inspector-panel") || document.querySelector(".inspector-panel");
+  if (panel && panel.classList.contains("collapsed")) {
+    toggleInspectorCollapse(false);
+  }
+
+  // Update tabs & rail buttons
+  ["audio", "cast", "fx"].forEach(tab => {
+    const railBtn = document.getElementById(`rail-tab-${tab}`);
+    if (railBtn) railBtn.classList.toggle("active", tab === tabName);
+
+    const tabPill = document.getElementById(`tab-btn-${tab}`);
+    if (tabPill) tabPill.classList.toggle("active", tab === tabName);
+
+    const pane = document.getElementById(`inspector-tab-pane-${tab}`);
+    if (pane) pane.classList.toggle("active", tab === tabName);
+  });
+}
+
+function toggleInspectorCollapse(forceState = null) {
+  const panel = document.getElementById("inspector-panel") || document.querySelector(".inspector-panel");
+  if (!panel) return;
+  const isCollapsed = forceState !== null ? forceState : !panel.classList.contains("collapsed");
+  panel.classList.toggle("collapsed", isCollapsed);
+  const btn = document.getElementById("btn-toggle-inspector-collapse");
+  if (btn) {
+    btn.textContent = isCollapsed ? "▶" : "◀";
+    btn.title = isCollapsed ? "Expand Inspector Panel" : "Collapse Inspector Panel";
+  }
+}
+
+function resetDspToNeutral() {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
+    ? state.selectedBlockIndices
+    : new Set([state.activeBlockIndex]);
+
+  targets.forEach(idx => {
+    const b = state.currentProject.blocks[idx];
+    if (!b) return;
+    b.pitch_shift = 0.0;
+    b.warmth = 0.0;
+    b.clarity = 0.0;
+    b.reverb = 0.0;
+  });
+  renderInspector();
+  debouncedSave();
+  recordHistory("Reset Tone to Neutral");
+  showToast("↺ Voice tone reset to neutral");
+}
+
+window.switchInspectorTab = switchInspectorTab;
+window.toggleInspectorCollapse = toggleInspectorCollapse;
+window.resetDspToNeutral = resetDspToNeutral;
+
 
