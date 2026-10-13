@@ -201,12 +201,12 @@ function getBlockSignature(block) {
   const warmth = Number(block.warmth || 0.0).toFixed(1);
   const clarity = Number(block.clarity || 0.0).toFixed(1);
   const reverb = Number(block.reverb || 0.0).toFixed(2);
-  const radio = block.radio_fx ? 1 : 0;
+  const filter = (block.fx_filter || (block.radio_fx ? "radio" : "none")).toLowerCase();
   let blendStr = "";
   if (block.blend_weights) {
     blendStr = Object.entries(block.blend_weights).sort().map(([k, v]) => `${k}:${Number(v).toFixed(2)}`).join(",");
   }
-  return `${text}__${voice}__${blendStr}__${speed}__${gain}__${pitch}__${warmth}__${clarity}__${reverb}__${radio}`;
+  return `${text}__${voice}__${blendStr}__${speed}__${gain}__${pitch}__${warmth}__${clarity}__${reverb}__${filter}`;
 }
 
 function getVoiceById(voiceId) {
@@ -895,6 +895,7 @@ function handleApplyPacingToAll() {
   const clarityVal = Number(activeBlock.clarity || 0.0);
   const reverbVal = Number(activeBlock.reverb || 0.0);
   const radioVal = Boolean(activeBlock.radio_fx);
+  const filterVal = (activeBlock.fx_filter || (radioVal ? "radio" : "none")).toLowerCase();
   const total = state.currentProject.blocks.length;
 
   state.currentProject.blocks.forEach(b => {
@@ -905,17 +906,18 @@ function handleApplyPacingToAll() {
     b.warmth = warmthVal;
     b.clarity = clarityVal;
     b.reverb = reverbVal;
-    b.radio_fx = radioVal;
+    b.radio_fx = (filterVal === "radio");
+    b.fx_filter = filterVal;
     delete b.cachedAudioUrl;
     delete b.cachedSig;
   });
 
   renderStudio();
   debouncedSave();
-  showToast(`⚡ Applied pacing, pitch & EQ (${speedVal}x speed, ${Math.round(gainVal * 100)}% vol, ${pitchVal > 0 ? '+' : ''}${pitchVal.toFixed(1)}st) to all ${total} sentences!`);
+  showToast(`⚡ Applied pacing, pitch, EQ & filter (${filterVal}) to all ${total} sentences!`);
 }
 
-function handleToggleRadioFx() {
+function handleSelectAudioFilter(filterName) {
   if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
   const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
     ? state.activeBlockIndex
@@ -923,7 +925,9 @@ function handleToggleRadioFx() {
   const activeBlock = state.currentProject.blocks[activeIdx];
   if (!activeBlock) return;
 
-  const newState = !activeBlock.radio_fx;
+  const curFilter = (activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none")).toLowerCase();
+  // Toggle off if clicking the already active filter (unless selecting 'none')
+  const targetFilter = (curFilter === filterName && filterName !== "none") ? "none" : filterName;
 
   const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
     ? state.selectedBlockIndices
@@ -932,7 +936,8 @@ function handleToggleRadioFx() {
   targets.forEach(idx => {
     const b = state.currentProject.blocks[idx];
     if (!b) return;
-    b.radio_fx = newState;
+    b.fx_filter = targetFilter;
+    b.radio_fx = (targetFilter === "radio");
     delete b.cachedAudioUrl;
     delete b.cachedSig;
     const row = document.querySelectorAll(".block-row")[idx];
@@ -946,7 +951,20 @@ function handleToggleRadioFx() {
   renderInspector();
   renderTimeline();
   debouncedSave();
-  showToast(`📻 Radio Transceiver Filter: ${newState ? "ON" : "OFF"} (${targets.size} sentence${targets.size > 1 ? "s" : ""})`);
+
+  const labels = {
+    "none": "Clean Studio",
+    "radio": "Radio Transceiver Filter",
+    "whisper": "Soft Whisper Filter",
+    "scream": "Intense Scream Filter",
+    "demon": "Deep Demon Filter",
+    "youth": "Child / Youth Filter"
+  };
+  showToast(`✨ Acoustic Filter: ${labels[targetFilter] || targetFilter} (${targets.size} sentence${targets.size > 1 ? "s" : ""})`);
+}
+
+function handleToggleRadioFx() {
+  handleSelectAudioFilter("radio");
 }
 
 async function handleAutoDirectStory() {
@@ -1246,7 +1264,8 @@ async function handleBulkRender() {
           warmth: block.warmth || 0.0,
           clarity: block.clarity || 0.0,
           reverb: block.reverb || 0.0,
-          radio_fx: Boolean(block.radio_fx)
+          radio_fx: Boolean(block.radio_fx),
+          fx_filter: block.fx_filter || (block.radio_fx ? "radio" : "none")
         })
       });
 
@@ -1389,20 +1408,23 @@ function renderInspector() {
     if (valReverb) valReverb.textContent = rVal + "%";
   }
 
-  const radioBtn = document.getElementById("btn-toggle-radio-fx");
-  if (radioBtn) {
-    const isRadio = Boolean(block.radio_fx);
-    radioBtn.textContent = isRadio ? "📻 Radio Transceiver Filter: ON" : "📻 Radio Transceiver Filter: OFF";
-    if (isRadio) {
-      radioBtn.style.backgroundColor = "rgba(234, 88, 12, 0.25)";
-      radioBtn.style.borderColor = "var(--primary)";
-      radioBtn.style.color = "#ffedd5";
-    } else {
-      radioBtn.style.backgroundColor = "transparent";
-      radioBtn.style.borderColor = "var(--border)";
-      radioBtn.style.color = "var(--text-subtle)";
-    }
-  }
+  // Acoustic FX Filter State
+  const curFilter = (block.fx_filter || (block.radio_fx ? "radio" : "none")).toLowerCase();
+  const filterNames = {
+    "none": "Clean Studio",
+    "radio": "Radio Transceiver",
+    "whisper": "Soft Whisper",
+    "scream": "Intense Scream",
+    "demon": "Deep Demon",
+    "youth": "Child / Youth"
+  };
+  const activeLabel = document.getElementById("val-active-filter");
+  if (activeLabel) activeLabel.textContent = filterNames[curFilter] || "Clean Studio";
+
+  ["none", "radio", "whisper", "scream", "demon", "youth"].forEach(f => {
+    const btn = document.getElementById(`btn-fx-${f}`);
+    if (btn) btn.classList.toggle("active", curFilter === f);
+  });
 }
 
 function renderTimeline() {
@@ -1509,7 +1531,8 @@ function prefetchNextBlock(idx) {
       warmth: nextBlock.warmth || 0.0,
       clarity: nextBlock.clarity || 0.0,
       reverb: nextBlock.reverb || 0.0,
-      radio_fx: Boolean(nextBlock.radio_fx)
+      radio_fx: Boolean(nextBlock.radio_fx),
+      fx_filter: nextBlock.fx_filter || (nextBlock.radio_fx ? "radio" : "none")
     })
   })
     .then(r => r.json())
@@ -1689,7 +1712,8 @@ async function playBlockAudio(idx, targetOffset = 0, isAutoContinuation = false)
         warmth: block.warmth || 0.0,
         clarity: block.clarity || 0.0,
         reverb: block.reverb || 0.0,
-        radio_fx: Boolean(block.radio_fx)
+        radio_fx: Boolean(block.radio_fx),
+        fx_filter: block.fx_filter || (block.radio_fx ? "radio" : "none")
       })
     });
 
@@ -1970,7 +1994,8 @@ async function toggleBatchRender() {
           warmth: block.warmth || 0.0,
           clarity: block.clarity || 0.0,
           reverb: block.reverb || 0.0,
-          radio_fx: Boolean(block.radio_fx)
+          radio_fx: Boolean(block.radio_fx),
+          fx_filter: block.fx_filter || (block.radio_fx ? "radio" : "none")
         })
       });
 
@@ -3131,6 +3156,7 @@ window.handleMakeDefaultVoice = handleMakeDefaultVoice;
 window.handleApplyVoiceToAll = handleApplyVoiceToAll;
 window.handleApplyPacingToAll = handleApplyPacingToAll;
 window.handleToggleRadioFx = handleToggleRadioFx;
+window.handleSelectAudioFilter = handleSelectAudioFilter;
 window.splitBlock = splitBlock;
 window.handleAutoSplitAll = handleAutoSplitAll;
 window.handleAutoDirectStory = handleAutoDirectStory;

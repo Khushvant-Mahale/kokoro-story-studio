@@ -83,6 +83,7 @@ async def handle_synthesize_block(request):
     clarity = float(data.get("clarity", 0.0))
     reverb = float(data.get("reverb", 0.0))
     radio_fx = bool(data.get("radio_fx", False))
+    fx_filter = str(data.get("fx_filter") or ("radio" if radio_fx else "none")).strip().lower()
 
     if not text:
         return web.json_response({"error": "Text is required"}, status=400)
@@ -99,7 +100,8 @@ async def handle_synthesize_block(request):
             warmth=warmth,
             clarity=clarity,
             reverb=reverb,
-            radio_fx=radio_fx
+            radio_fx=radio_fx,
+            fx_filter=fx_filter
         )
         return web.json_response(res)
     except Exception as e:
@@ -116,6 +118,7 @@ async def handle_blend_preview(request):
     clarity = float(data.get("clarity", 0.0))
     reverb = float(data.get("reverb", 0.0))
     radio_fx = bool(data.get("radio_fx", False))
+    fx_filter = str(data.get("fx_filter") or ("radio" if radio_fx else "none")).strip().lower()
 
     try:
         res = await asyncio.to_thread(
@@ -129,7 +132,8 @@ async def handle_blend_preview(request):
             warmth=warmth,
             clarity=clarity,
             reverb=reverb,
-            radio_fx=radio_fx
+            radio_fx=radio_fx,
+            fx_filter=fx_filter
         )
         return web.json_response(res)
     except Exception as e:

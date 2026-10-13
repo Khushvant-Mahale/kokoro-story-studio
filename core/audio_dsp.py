@@ -182,6 +182,111 @@ def apply_radio_filter(samples: np.ndarray, sr: int = 24000) -> np.ndarray:
     return np.clip(saturated, -1.0, 1.0).astype(np.float32)
 
 
+def apply_whisper_filter(samples: np.ndarray, sr: int = 24000) -> np.ndarray:
+    """
+    Acoustic whisperization filter:
+    - Highpass filter at 350 Hz to strip voiced pitch glottal pulses
+    - High-shelf air presence boost (+5.0 dB at 4,200 Hz) for breath friction
+    - Soft dynamics scaling (0.75x) + 12% intimate room reverb
+    """
+    if not HAS_SCIPY or len(samples) < 128:
+        return samples
+
+    nyq = sr / 2.0
+    # 1. Highpass cutoff at 350 Hz (removes voiced glottal pulse f0)
+    b_hp, a_hp = signal.butter(3, 350.0 / nyq, btype="high")
+    out = signal.lfilter(b_hp, a_hp, samples)
+
+    # 2. Air presence boost (+5.0 dB high-shelf at 4200 Hz)
+    out = apply_eq(out, sr=sr, warmth_db=0.0, clarity_db=5.0)
+
+    # 3. Soft unvoiced level
+    out = out * 0.75
+
+    # 4. Intimate room ambience
+    out = apply_reverb(out, sr=sr, wet=0.12)
+    return np.clip(out, -1.0, 1.0).astype(np.float32)
+
+
+def apply_scream_filter(samples: np.ndarray, sr: int = 24000) -> np.ndarray:
+    """
+    Intense vocal strain & panic scream filter:
+    - +1.5 semitones pitch strain (strained vocal cords)
+    - 2.8 kHz throat strain resonance peak (+5.0 dB)
+    - Asymmetric overdrive transistor saturation (analog microphone clipping)
+    """
+    if not HAS_SCIPY or len(samples) < 128:
+        return samples
+
+    # 1. Pitch strain shift (+1.5 semitones)
+    out = pitch_shift(samples, sr=sr, semitones=1.5)
+
+    # 2. Peak resonance around 2,800 Hz (ear sensitivity / screaming vocal tract resonance)
+    w0 = 2.0 * np.pi * 2800.0 / sr
+    bw = 0.5
+    alpha = np.sin(w0) * np.sinh(np.log(2.0) / 2.0 * bw * w0 / np.sin(w0))
+    A = 10.0 ** (5.0 / 40.0) # +5 dB
+    b0 = 1.0 + alpha * A
+    b1 = -2.0 * np.cos(w0)
+    b2 = 1.0 - alpha * A
+    a0 = 1.0 + alpha / A
+    a1 = -2.0 * np.cos(w0)
+    a2 = 1.0 - alpha / A
+    out = signal.lfilter(np.array([b0, b1, b2]) / a0, np.array([a0, a1, a2]) / a0, out)
+
+    # 3. Aggressive overdrive saturation
+    saturated = np.tanh(out * 2.5) * 0.95
+    return np.clip(saturated, -1.0, 1.0).astype(np.float32)
+
+
+def apply_demon_filter(samples: np.ndarray, sr: int = 24000) -> np.ndarray:
+    """
+    Demonic beast / monster filter:
+    - -4.5 semitones sub-octave drop
+    - Deep 120 Hz sub-bass chest resonance boost (+6.0 dB)
+    - Demonic harmonic growl saturation
+    - 22% dark cavern reverb
+    """
+    if not HAS_SCIPY or len(samples) < 128:
+        return samples
+
+    # 1. Pitch shift down by -4.5 semitones
+    out = pitch_shift(samples, sr=sr, semitones=-4.5)
+
+    # 2. Sub-bass boost at 120 Hz
+    out = apply_eq(out, sr=sr, warmth_db=6.0, clarity_db=-1.0)
+
+    # 3. Demonic growl saturation
+    out = np.tanh(out * 1.8) * 0.92
+
+    # 4. Cavern reverb
+    out = apply_reverb(out, sr=sr, wet=0.22)
+    return np.clip(out, -1.0, 1.0).astype(np.float32)
+
+
+def apply_youth_filter(samples: np.ndarray, sr: int = 24000) -> np.ndarray:
+    """
+    Youth / child vocal tract filter:
+    - +3.8 semitones pitch shift
+    - Highpass cutoff at 240 Hz (strips adult chest resonance / vocal tract length)
+    - Treble shelf presence boost (+3.5 dB at 4,200 Hz)
+    """
+    if not HAS_SCIPY or len(samples) < 128:
+        return samples
+
+    # 1. Pitch shift up by +3.8 semitones
+    out = pitch_shift(samples, sr=sr, semitones=3.8)
+
+    # 2. Vocal tract shortening highpass at 240 Hz
+    nyq = sr / 2.0
+    b_hp, a_hp = signal.butter(2, 240.0 / nyq, btype="high")
+    out = signal.lfilter(b_hp, a_hp, out)
+
+    # 3. Bright treble presence
+    out = apply_eq(out, sr=sr, warmth_db=-1.5, clarity_db=3.5)
+    return np.clip(out, -1.0, 1.0).astype(np.float32)
+
+
 def process_audio_fx(
     samples: np.ndarray,
     sr: int = 24000,
@@ -189,13 +294,14 @@ def process_audio_fx(
     warmth_db: float = 0.0,
     clarity_db: float = 0.0,
     reverb_wet: float = 0.0,
-    radio_fx: bool = False
+    radio_fx: bool = False,
+    fx_filter: str = "none"
 ) -> np.ndarray:
     """
     Master audio DSP pipeline:
     1. Pitch shift (semitones)
     2. Tone EQ (warmth + clarity)
-    3. Radio Transceiver filter (if enabled)
+    3. Specialized Acoustic FX Filter (radio, whisper, scream, demon, youth)
     4. Atmosphere Reverb (if enabled)
     """
     if samples is None or len(samples) == 0:
@@ -211,9 +317,18 @@ def process_audio_fx(
     if abs(warmth_db) >= 0.1 or abs(clarity_db) >= 0.1:
         out = apply_eq(out, sr=sr, warmth_db=warmth_db, clarity_db=clarity_db)
 
-    # 3. Radio Filter
-    if radio_fx:
+    # 3. Acoustic FX Filters
+    filt = str(fx_filter or "none").strip().lower()
+    if filt == "radio" or (radio_fx and filt == "none"):
         out = apply_radio_filter(out, sr=sr)
+    elif filt == "whisper":
+        out = apply_whisper_filter(out, sr=sr)
+    elif filt == "scream":
+        out = apply_scream_filter(out, sr=sr)
+    elif filt == "demon":
+        out = apply_demon_filter(out, sr=sr)
+    elif filt == "youth":
+        out = apply_youth_filter(out, sr=sr)
 
     # 4. Atmosphere Reverb
     if reverb_wet > 0.02:

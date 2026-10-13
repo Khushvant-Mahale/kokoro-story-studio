@@ -579,6 +579,53 @@ input[type="range"]::-webkit-slider-thumb {
   border-color: var(--accent);
 }
 
+/* Acoustic FX Filter Grid */
+.fx-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.fx-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  text-align: center;
+}
+
+.fx-filter-btn:hover {
+  background-color: var(--bg-card-hover);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.fx-filter-btn.active {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.28), rgba(234, 88, 12, 0.12));
+  border-color: var(--accent);
+  color: #ffedd5;
+  box-shadow: 0 0 10px rgba(234, 88, 12, 0.25);
+}
+
+.fx-filter-btn#btn-fx-none.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.28), rgba(99, 102, 241, 0.12));
+  border-color: #6366f1;
+  color: #e0e7ff;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.25);
+}
+
 #btn-auto-direct {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.16), rgba(168, 85, 247, 0.1));
   border-color: rgba(168, 85, 247, 0.35);

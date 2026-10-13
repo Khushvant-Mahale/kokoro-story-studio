@@ -110,6 +110,7 @@ class KokoroEngine:
         clarity: float = 0.0,
         reverb: float = 0.0,
         radio_fx: bool = False,
+        fx_filter: str = "none",
         lang: str = "en-us"
     ) -> Dict:
         """
@@ -129,11 +130,11 @@ class KokoroEngine:
         warmth_f = float(warmth or 0.0)
         clarity_f = float(clarity or 0.0)
         reverb_f = float(reverb or 0.0)
-        radio_fx_b = bool(radio_fx)
+        fx_filter_s = str(fx_filter or ("radio" if radio_fx else "none")).strip().lower()
 
         cache_str = (
             f"{clean_text}__{voice_tag}__{speed:.2f}__{gain:.2f}__"
-            f"{pitch_shift_f:.1f}__{warmth_f:.1f}__{clarity_f:.1f}__{reverb_f:.2f}__{int(radio_fx_b)}"
+            f"{pitch_shift_f:.1f}__{warmth_f:.1f}__{clarity_f:.1f}__{reverb_f:.2f}__{fx_filter_s}"
         )
         cache_hash = hashlib.md5(cache_str.encode("utf-8")).hexdigest()
         cache_file = CACHE_DIR / f"{cache_hash}.wav"
@@ -165,7 +166,7 @@ class KokoroEngine:
                     warmth_db=warmth_f,
                     clarity_db=clarity_f,
                     reverb_wet=reverb_f,
-                    radio_fx=radio_fx_b
+                    fx_filter=fx_filter_s
                 )
                 sf.write(str(cache_file), processed, self.sample_rate)
                 duration = len(processed) / self.sample_rate
@@ -195,7 +196,8 @@ class KokoroEngine:
                     "warmth": warmth_f,
                     "clarity": clarity_f,
                     "reverb": reverb_f,
-                    "radio_fx": radio_fx_b,
+                    "radio_fx": fx_filter_s == "radio",
+                    "fx_filter": fx_filter_s,
                     "lang": lang
                 }).encode("utf-8")
                 req = urllib.request.Request(
@@ -211,7 +213,7 @@ class KokoroEngine:
                     if audio_bytes and len(audio_bytes) > 100:
                         with open(cache_file, "wb") as f:
                             f.write(audio_bytes)
-                        if pitch_shift_f == 0.0 and warmth_f == 0.0 and clarity_f == 0.0 and reverb_f == 0.0 and not radio_fx_b and gain == 1.0:
+                        if pitch_shift_f == 0.0 and warmth_f == 0.0 and clarity_f == 0.0 and reverb_f == 0.0 and fx_filter_s == "none" and gain == 1.0:
                             try:
                                 with open(raw_cache_file, "wb") as f_raw:
                                     f_raw.write(audio_bytes)
@@ -270,7 +272,7 @@ class KokoroEngine:
         if gain != 1.0:
             raw_samples = raw_samples * gain
 
-        # Apply voice audio DSP: pitch shift, warmth EQ, clarity air, reverb & radio filter
+        # Apply voice audio DSP: pitch shift, warmth EQ, clarity air, reverb & acoustic FX filter
         raw_samples = process_audio_fx(
             raw_samples,
             sr=self.sample_rate,
@@ -278,7 +280,7 @@ class KokoroEngine:
             warmth_db=warmth_f,
             clarity_db=clarity_f,
             reverb_wet=reverb_f,
-            radio_fx=radio_fx_b
+            fx_filter=fx_filter_s
         )
 
         # Save to cache
@@ -312,6 +314,7 @@ class KokoroEngine:
             clarity = float(b.get("clarity", 0.0))
             reverb = float(b.get("reverb", 0.0))
             radio_fx = bool(b.get("radio_fx", False))
+            fx_filter = str(b.get("fx_filter") or ("radio" if radio_fx else "none")).strip().lower()
             pause_after = float(b.get("pause_after", 0.6))
 
             # Fetch or generate block audio
@@ -325,7 +328,8 @@ class KokoroEngine:
                 warmth=warmth,
                 clarity=clarity,
                 reverb=reverb,
-                radio_fx=radio_fx
+                radio_fx=radio_fx,
+                fx_filter=fx_filter
             )
             cache_file = CACHE_DIR / f"{res['hash']}.wav"
             samples, _ = sf.read(str(cache_file))
@@ -373,6 +377,7 @@ class KokoroEngine:
                 clarity_f = float(b.get("clarity", 0.0) or 0.0)
                 reverb_f = float(b.get("reverb", 0.0) or 0.0)
                 radio_fx_b = bool(b.get("radio_fx", False))
+                fx_filter_s = str(b.get("fx_filter") or ("radio" if radio_fx_b else "none")).strip().lower()
 
                 res = self.synthesize_block(
                     text,
@@ -385,6 +390,7 @@ class KokoroEngine:
                     clarity=clarity_f,
                     reverb=reverb_f,
                     radio_fx=radio_fx_b,
+                    fx_filter=fx_filter_s,
                 )
                 cache_file = CACHE_DIR / f"{res['hash']}.wav"
 

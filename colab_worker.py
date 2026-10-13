@@ -205,7 +205,7 @@ def phase_vocoder(d, rate, hop_length=256):
         phase_acc += phi_advance + dphase
     return d_stretch
 
-def process_audio_fx(samples, sr=24000, pitch_shift_st=0.0, warmth_db=0.0, clarity_db=0.0, reverb_wet=0.0, radio_fx=False):
+def process_audio_fx(samples, sr=24000, pitch_shift_st=0.0, warmth_db=0.0, clarity_db=0.0, reverb_wet=0.0, radio_fx=False, fx_filter="none"):
     if samples is None or len(samples) == 0:
         return samples
     out = samples.copy()
@@ -250,10 +250,26 @@ def process_audio_fx(samples, sr=24000, pitch_shift_st=0.0, warmth_db=0.0, clari
         except Exception:
             pass
 
-    if HAS_SCIPY and radio_fx and len(out) >= 64:
+    filt = str(fx_filter or "none").strip().lower()
+    if filt == "none" and radio_fx:
+        filt = "radio"
+
+    if HAS_SCIPY and len(out) >= 64:
         try:
-            b, a = signal.butter(4, [400.0 / (sr / 2.0), 3400.0 / (sr / 2.0)], btype="band")
-            out = np.tanh(signal.lfilter(b, a, out) * 1.6) * 0.85
+            nyq = sr / 2.0
+            if filt == "radio":
+                b, a = signal.butter(4, [400.0 / nyq, 3400.0 / nyq], btype="band")
+                out = np.tanh(signal.lfilter(b, a, out) * 1.6) * 0.85
+            elif filt == "whisper":
+                b, a = signal.butter(3, 350.0 / nyq, btype="high")
+                out = signal.lfilter(b, a, out) * 0.75
+            elif filt == "scream":
+                out = np.tanh(out * 2.5) * 0.95
+            elif filt == "demon":
+                out = np.tanh(out * 1.8) * 0.92
+            elif filt == "youth":
+                b, a = signal.butter(2, 240.0 / nyq, btype="high")
+                out = signal.lfilter(b, a, out)
         except Exception:
             pass
 
@@ -318,6 +334,7 @@ async def synthesize(req: Request):
     clarity = float(data.get("clarity", 0.0))
     reverb = float(data.get("reverb", 0.0))
     radio_fx = bool(data.get("radio_fx", False))
+    fx_filter = str(data.get("fx_filter") or ("radio" if radio_fx else "none")).strip().lower()
     lang = data.get("lang", "en-us")
 
     if not text:
@@ -356,7 +373,8 @@ async def synthesize(req: Request):
             warmth_db=warmth,
             clarity_db=clarity,
             reverb_wet=reverb,
-            radio_fx=radio_fx
+            radio_fx=radio_fx,
+            fx_filter=fx_filter
         )
 
         buf = io.BytesIO()
