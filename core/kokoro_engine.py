@@ -301,6 +301,14 @@ class KokoroEngine:
         audio_segments = []
 
         for b in blocks:
+            # Check if block is a scene heading / non-spoken marker
+            if b.get("type") == "heading" or not b.get("is_spoken", True):
+                pause_after = float(b.get("pause_after", 1.0) or 1.0)
+                if pause_after > 0:
+                    silence = np.zeros(int(self.sample_rate * pause_after), dtype=np.float32)
+                    audio_segments.append(silence)
+                continue
+
             text = b.get("text", "").strip()
             if not text:
                 continue
@@ -357,11 +365,15 @@ class KokoroEngine:
     def export_blocks_as_zip(self, blocks: List[Dict], filename: str = "story_sentences.zip") -> Dict:
         """
         Synthesizes/gathers all blocks and packages each sentence as a separate numbered WAV file in a ZIP archive.
+        Skips non-spoken scene headings.
         """
         import zipfile
         out_zip_path = OUTPUT_DIR / filename
 
-        valid_blocks = [b for b in blocks if b.get("text", "").strip()]
+        valid_blocks = [
+            b for b in blocks 
+            if b.get("text", "").strip() and b.get("type") != "heading" and b.get("is_spoken", True)
+        ]
         if not valid_blocks:
             return {"error": "No valid sentences to export"}
 

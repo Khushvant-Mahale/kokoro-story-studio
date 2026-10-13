@@ -263,6 +263,30 @@
               <span id="select-all-label">Select All</span>
             </button>
             <span id="bulk-selection-count-text" class="selection-count-pill" style="display: none;">0 Selected</span>
+
+            <!-- Undo / Redo & History Group -->
+            <div class="undo-redo-toolbar-group">
+              <button class="action-pill-btn undo-btn" id="btn-undo" onclick="handleUndo()" title="Undo last action (Ctrl+Z)" disabled>
+                ↺ <span class="btn-text-sm">Undo</span>
+              </button>
+              <button class="action-pill-btn redo-btn" id="btn-redo" onclick="handleRedo()" title="Redo action (Ctrl+Y or Ctrl+Shift+Z)" disabled>
+                ↻ <span class="btn-text-sm">Redo</span>
+              </button>
+              <div class="history-dropdown-wrapper" id="history-dropdown-wrapper">
+                <button class="action-pill-btn history-toggle-btn" id="btn-history-dropdown-toggle" onclick="toggleHistoryDropdown(event)" title="View Undo/Redo Action History List">
+                  📜 History <span id="history-badge-count" class="badge-mini">0</span> ▾
+                </button>
+                <div class="history-dropdown-menu" id="history-dropdown-menu" style="display: none;">
+                  <div class="history-dropdown-header">
+                    <span>Action History</span>
+                    <span id="history-dropdown-total" style="font-size: 11px; color: var(--text-muted);">0 steps</span>
+                  </div>
+                  <div class="history-dropdown-list" id="history-dropdown-list">
+                    <div class="history-empty-item">No actions recorded yet</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="action-bar-right" id="bulk-action-buttons">
             <button class="action-pill-btn" id="btn-auto-direct" onclick="handleAutoDirectStory()" title="Auto-detect characters, dialogue quotes, whispers, screaming, and emotional pacing across the entire story">
@@ -332,7 +356,10 @@
         <div class="story-container" id="story-container">
           <!-- Sentence rows with text rendered dynamically -->
         </div>
-        <button type="button" class="add-block-btn" id="btn-add-block">＋ Add Sentence Block</button>
+        <div class="canvas-add-buttons-row">
+          <button type="button" class="add-block-btn" id="btn-add-block">＋ Add Sentence Block</button>
+          <button type="button" class="add-block-btn add-heading-btn" id="btn-add-heading" onclick="addNewSceneHeading()" title="Add a non-spoken Scene or Chapter divider heading (e.g. Scene 2, Chapter 1)">🎬 Add Scene Heading</button>
+        </div>
       </main>
     </div>
 
@@ -540,6 +567,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=450"></script>
+  <script src="/studio/js/app.js?v=460"></script>
 </body>
 </html>

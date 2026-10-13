@@ -17,8 +17,270 @@ const state = {
   isPlayingStory: false,
   isBatchRunning: false,
   nextSentenceTimer: null,
-  config: { remote_worker_url: "", active: false }
+  config: { remote_worker_url: "", active: false },
+  undoStack: [],
+  redoStack: []
 };
+
+// ---------------- UTILITIES & HELPERS ---------------- //
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatTimeAgo(timestamp) {
+  if (!timestamp) return "Recently";
+  const sec = Math.max(1, Math.floor((Date.now() - timestamp) / 1000));
+  if (sec < 10) return "Just now";
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  return `${hr}h ago`;
+}
+
+function countHeadings() {
+  if (!state.currentProject?.blocks) return 0;
+  return state.currentProject.blocks.filter(b => b.type === "heading" || b.is_spoken === false).length;
+}
+
+// ---------------- UNDO / REDO & ACTION HISTORY ENGINE ---------------- //
+
+function recordHistory(actionLabel) {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+
+  const blocksClone = JSON.parse(JSON.stringify(state.currentProject.blocks));
+  const activeIdx = state.activeBlockIndex;
+  const selectedIndices = Array.from(state.selectedBlockIndices || [0]);
+
+  state.undoStack.push({
+    label: actionLabel,
+    blocks: blocksClone,
+    activeBlockIndex: activeIdx,
+    selectedBlockIndices: selectedIndices,
+    timestamp: Date.now()
+  });
+
+  if (state.undoStack.length > 50) {
+    state.undoStack.shift();
+  }
+
+  // Any new action clears the redo stack
+  state.redoStack = [];
+  updateUndoRedoUI();
+}
+
+function handleUndo() {
+  if (!state.currentProject || !state.undoStack || state.undoStack.length === 0) {
+    showToast("ℹ️ Nothing to undo.");
+    return;
+  }
+
+  // Take current state and push onto redo stack
+  const currentSnapshot = {
+    label: state.undoStack[state.undoStack.length - 1].label || "Action",
+    blocks: JSON.parse(JSON.stringify(state.currentProject.blocks)),
+    activeBlockIndex: state.activeBlockIndex,
+    selectedBlockIndices: Array.from(state.selectedBlockIndices || [0]),
+    timestamp: Date.now()
+  };
+  state.redoStack.push(currentSnapshot);
+
+  // Pop previous snapshot from undo stack
+  const previousSnapshot = state.undoStack.pop();
+  state.currentProject.blocks = previousSnapshot.blocks;
+  state.activeBlockIndex = Math.min(previousSnapshot.activeBlockIndex || 0, Math.max(0, state.currentProject.blocks.length - 1));
+  state.selectedBlockIndices = new Set((previousSnapshot.selectedBlockIndices || [0]).filter(i => i < state.currentProject.blocks.length));
+  if (state.selectedBlockIndices.size === 0) state.selectedBlockIndices.add(0);
+
+  renderStudio();
+  debouncedSave();
+  updateUndoRedoUI();
+  showToast(`↺ Undid: ${previousSnapshot.label}`);
+}
+
+function handleRedo() {
+  if (!state.currentProject || !state.redoStack || state.redoStack.length === 0) {
+    showToast("ℹ️ Nothing to redo.");
+    return;
+  }
+
+  // Take current state and push onto undo stack
+  const currentSnapshot = {
+    label: state.redoStack[state.redoStack.length - 1].label || "Action",
+    blocks: JSON.parse(JSON.stringify(state.currentProject.blocks)),
+    activeBlockIndex: state.activeBlockIndex,
+    selectedBlockIndices: Array.from(state.selectedBlockIndices || [0]),
+    timestamp: Date.now()
+  };
+  state.undoStack.push(currentSnapshot);
+
+  // Pop next snapshot from redo stack
+  const nextSnapshot = state.redoStack.pop();
+  state.currentProject.blocks = nextSnapshot.blocks;
+  state.activeBlockIndex = Math.min(nextSnapshot.activeBlockIndex || 0, Math.max(0, state.currentProject.blocks.length - 1));
+  state.selectedBlockIndices = new Set((nextSnapshot.selectedBlockIndices || [0]).filter(i => i < state.currentProject.blocks.length));
+  if (state.selectedBlockIndices.size === 0) state.selectedBlockIndices.add(0);
+
+  renderStudio();
+  debouncedSave();
+  updateUndoRedoUI();
+  showToast(`↻ Redid: ${nextSnapshot.label}`);
+}
+
+function revertToHistoryStep(targetIndex) {
+  if (!state.currentProject || !state.undoStack || targetIndex < 0 || targetIndex >= state.undoStack.length) return;
+
+  // Take snapshot of current state for redo
+  const currentSnapshot = {
+    label: "Current State",
+    blocks: JSON.parse(JSON.stringify(state.currentProject.blocks)),
+    activeBlockIndex: state.activeBlockIndex,
+    selectedBlockIndices: Array.from(state.selectedBlockIndices || [0]),
+    timestamp: Date.now()
+  };
+  state.redoStack.push(currentSnapshot);
+
+  // Pop all items after targetIndex into redo stack
+  while (state.undoStack.length > targetIndex + 1) {
+    state.redoStack.push(state.undoStack.pop());
+  }
+
+  const targetSnapshot = state.undoStack.pop();
+  state.currentProject.blocks = targetSnapshot.blocks;
+  state.activeBlockIndex = Math.min(targetSnapshot.activeBlockIndex || 0, Math.max(0, state.currentProject.blocks.length - 1));
+  state.selectedBlockIndices = new Set((targetSnapshot.selectedBlockIndices || [0]).filter(i => i < state.currentProject.blocks.length));
+  if (state.selectedBlockIndices.size === 0) state.selectedBlockIndices.add(0);
+
+  renderStudio();
+  debouncedSave();
+  updateUndoRedoUI();
+  closeHistoryDropdown();
+  showToast(`↺ Restored state: "${targetSnapshot.label}"`);
+}
+
+function updateUndoRedoUI() {
+  const undoBtn = document.getElementById("btn-undo");
+  const redoBtn = document.getElementById("btn-redo");
+  const badgeCount = document.getElementById("history-badge-count");
+  const totalLabel = document.getElementById("history-dropdown-total");
+
+  const canUndo = Boolean(state.undoStack && state.undoStack.length > 0);
+  const canRedo = Boolean(state.redoStack && state.redoStack.length > 0);
+
+  if (undoBtn) {
+    undoBtn.disabled = !canUndo;
+    if (canUndo) {
+      undoBtn.title = `Undo "${state.undoStack[state.undoStack.length - 1].label}" (Ctrl+Z)`;
+    } else {
+      undoBtn.title = "Nothing to undo (Ctrl+Z)";
+    }
+  }
+
+  if (redoBtn) {
+    redoBtn.disabled = !canRedo;
+    if (canRedo) {
+      redoBtn.title = `Redo "${state.redoStack[state.redoStack.length - 1].label}" (Ctrl+Y)`;
+    } else {
+      redoBtn.title = "Nothing to redo (Ctrl+Y)";
+    }
+  }
+
+  const totalSteps = (state.undoStack?.length || 0);
+  if (badgeCount) badgeCount.textContent = totalSteps;
+  if (totalLabel) totalLabel.textContent = `${totalSteps} step${totalSteps === 1 ? '' : 's'}`;
+
+  renderHistoryDropdownList();
+}
+
+function toggleHistoryDropdown(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById("history-dropdown-menu");
+  if (!menu) return;
+  const isHidden = (menu.style.display === "none" || !menu.style.display);
+  menu.style.display = isHidden ? "flex" : "none";
+  if (isHidden) {
+    renderHistoryDropdownList();
+  }
+}
+
+function closeHistoryDropdown() {
+  const menu = document.getElementById("history-dropdown-menu");
+  if (menu) menu.style.display = "none";
+}
+
+function renderHistoryDropdownList() {
+  const listEl = document.getElementById("history-dropdown-list");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+
+  const undoLen = state.undoStack ? state.undoStack.length : 0;
+  const redoLen = state.redoStack ? state.redoStack.length : 0;
+
+  if (undoLen === 0 && redoLen === 0) {
+    listEl.innerHTML = `<div class="history-empty-item">No actions in history yet.<br><span style="font-size: 11px; opacity: 0.7;">Edits and changes will appear here.</span></div>`;
+    return;
+  }
+
+  // 1. Redo steps (future)
+  if (redoLen > 0) {
+    state.redoStack.slice().reverse().forEach((item) => {
+      const div = document.createElement("div");
+      div.className = "history-dropdown-item redo-item";
+      div.title = "Click to redo forward to this state";
+      div.innerHTML = `
+        <div class="history-item-label">
+          <span>↻</span>
+          <span>${escapeHtml(item.label || "Action")}</span>
+        </div>
+        <span class="history-item-time">Redo</span>
+      `;
+      div.addEventListener("click", () => {
+        handleRedo();
+      });
+      listEl.appendChild(div);
+    });
+  }
+
+  // 2. Current State Marker
+  const currentMarker = document.createElement("div");
+  currentMarker.className = "history-dropdown-item active";
+  currentMarker.innerHTML = `
+    <div class="history-item-label">
+      <span>●</span>
+      <span>Current Story State</span>
+    </div>
+    <span class="history-item-time">Now</span>
+  `;
+  listEl.appendChild(currentMarker);
+
+  // 3. Undo steps (past, newest on top)
+  for (let i = undoLen - 1; i >= 0; i--) {
+    const item = state.undoStack[i];
+    const div = document.createElement("div");
+    div.className = "history-dropdown-item";
+    div.title = `Click to roll back story to: ${item.label}`;
+    const timeAgo = formatTimeAgo(item.timestamp);
+
+    div.innerHTML = `
+      <div class="history-item-label">
+        <span>↺</span>
+        <span>${escapeHtml(item.label || "Action")}</span>
+      </div>
+      <span class="history-item-time">${timeAgo}</span>
+    `;
+    div.addEventListener("click", () => {
+      revertToHistoryStep(i);
+    });
+    listEl.appendChild(div);
+  }
+}
 
 // ---------------- INITIALIZATION ---------------- //
 
@@ -153,6 +415,9 @@ async function openProject(projectId) {
     state.activeBlockIndex = 0;
     state.selectedBlockIndices = new Set([0]);
     state.lastClickedIndex = 0;
+    state.undoStack = [];
+    state.redoStack = [];
+    updateUndoRedoUI();
     if (state.currentProject && state.currentProject.blocks) {
       state.currentProject.blocks.forEach(block => {
         const sig = getBlockSignature(block);
@@ -365,6 +630,76 @@ function renderBlocks() {
   container.innerHTML = "";
 
   state.currentProject.blocks.forEach((block, idx) => {
+    // ---------------- SCENE / SECTION DIVIDER (NON-SPOKEN) ---------------- //
+    if (block.type === "heading" || block.is_spoken === false) {
+      const isPlaying = state.currentlyPlayingBlockIdx === idx;
+      const isSelected = state.selectedBlockIndices.has(idx);
+      const isActive = state.activeBlockIndex === idx;
+
+      const sceneRow = document.createElement("div");
+      sceneRow.className = `scene-divider-row ${isActive ? "active" : ""} ${isSelected ? "selected" : ""} ${isPlaying ? "playing" : ""}`;
+      sceneRow.dataset.index = idx;
+
+      const pVal = Number(block.pause_after !== undefined ? block.pause_after : 1.0).toFixed(1);
+
+      sceneRow.innerHTML = `
+        <div class="scene-divider-left">
+          <span class="scene-badge-icon" title="Scene / Chapter Divider">🎬</span>
+          <div class="scene-content-col">
+            <div class="scene-meta-row">
+              <span class="scene-category-pill">Scene / Section Divider</span>
+              <span class="scene-nonspoken-tag">🔇 Non-Spoken • Excluded from Voice Generation</span>
+            </div>
+            <input type="text" class="scene-title-input" value="${escapeHtml(block.text || '')}" placeholder="e.g. Scene 2: Day Three (non-spoken)...">
+          </div>
+        </div>
+        <div class="scene-divider-right">
+          <div class="scene-pause-box" title="Transition silence pause before the next scene starts">
+            <span>⏱ Pause:</span>
+            <input type="number" class="scene-pause-input" value="${pVal}" min="0" max="10" step="0.5">s
+          </div>
+          <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert sentence below this divider">＋</button>
+          <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert another scene divider below" style="font-size: 13px;">🎬</button>
+          <button type="button" class="scene-btn convert-speech-btn" onclick="convertHeadingToSpeech(${idx})" title="Convert to regular spoken sentence block">🎙️ Speak</button>
+          <button type="button" class="scene-delete-btn" onclick="deleteBlock(${idx})" title="Delete scene heading">✕</button>
+        </div>
+      `;
+
+      container.appendChild(sceneRow);
+
+      const titleInput = sceneRow.querySelector(".scene-title-input");
+      titleInput.addEventListener("input", (e) => {
+        block.text = e.target.value;
+        renderTimeline();
+        debouncedSave();
+      });
+      titleInput.addEventListener("focus", () => {
+        titleInput.dataset.initialText = block.text;
+        selectBlock(idx, "single");
+      });
+      titleInput.addEventListener("blur", () => {
+        if (titleInput.dataset.initialText !== undefined && titleInput.dataset.initialText !== block.text) {
+          recordHistory("Edit Scene Title");
+          delete titleInput.dataset.initialText;
+        }
+      });
+
+      const pauseInput = sceneRow.querySelector(".scene-pause-input");
+      pauseInput.addEventListener("change", (e) => {
+        recordHistory("Change Scene Pause");
+        block.pause_after = Math.max(0, parseFloat(e.target.value) || 0);
+        debouncedSave();
+      });
+
+      sceneRow.addEventListener("click", (e) => {
+        if (e.target.closest("button") || e.target.closest("input")) return;
+        selectBlock(idx, "single");
+      });
+
+      return;
+    }
+
+    // ---------------- SPOKEN SENTENCE BLOCK ---------------- //
     const voice = getVoiceById(block.voice_id);
     const row = document.createElement("div");
     const currentSig = getBlockSignature(block);
@@ -399,6 +734,7 @@ function renderBlocks() {
       </div>
       <div class="block-actions">
         <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert new sentence below (Ctrl+Enter)">＋</button>
+        <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert non-spoken Scene Heading below (🎬)" style="font-size: 13px;">🎬</button>
         <button type="button" class="play-block-btn" title="Play sentence (or Space)">${isPlaying ? "🔊" : "▶"}</button>
         <button type="button" class="delete-block-btn" onclick="deleteBlock(${idx})" title="Delete sentence">✕</button>
       </div>
@@ -429,6 +765,7 @@ function renderBlocks() {
     });
 
     textarea.addEventListener("focus", () => {
+      textarea.dataset.initialText = block.text || "";
       if (textarea.value === "New sentence..." || textarea.value === "Type sentence here...") {
         textarea.select();
       }
@@ -439,6 +776,13 @@ function renderBlocks() {
         renderInspector();
         highlightTimelineBlock(idx);
         updateActiveSentenceHint(idx);
+      }
+    });
+
+    textarea.addEventListener("blur", () => {
+      if (textarea.dataset.initialText !== undefined && textarea.dataset.initialText !== (block.text || "")) {
+        recordHistory("Edit Sentence");
+        delete textarea.dataset.initialText;
       }
     });
 
@@ -578,7 +922,7 @@ function selectBlock(idx, mode = "single") {
 }
 
 function updateSelectionDOM() {
-  const rows = document.querySelectorAll(".block-row");
+  const rows = document.querySelectorAll(".block-row, .scene-divider-row");
   rows.forEach((row, i) => {
     const isSelected = state.selectedBlockIndices.has(i);
     const isActive = state.activeBlockIndex === i;
@@ -726,6 +1070,8 @@ function handleMakeDefaultVoice() {
   const activeBlock = state.currentProject.blocks[activeIdx];
   if (!activeBlock) return;
 
+  recordHistory("Set Default Narrator");
+
   const newVoiceId = activeBlock.voice_id || "blend_fenrir_onyx";
   const newBlendWeights = activeBlock.blend_weights ? JSON.parse(JSON.stringify(activeBlock.blend_weights)) : null;
   const voiceObj = getVoiceById(newVoiceId);
@@ -762,6 +1108,8 @@ function handleBulkDelete() {
   if (!state.currentProject || !state.currentProject.blocks) return;
   const count = state.selectedBlockIndices.size;
   if (count === 0) return;
+
+  recordHistory(`Bulk Delete ${count} Sentences`);
 
   const remaining = state.currentProject.blocks.filter((_, idx) => !state.selectedBlockIndices.has(idx));
   if (remaining.length === 0) {
@@ -801,6 +1149,8 @@ function handleBulkMergeSelected() {
     showToast("⚠️ Select at least 2 sentences to merge.");
     return;
   }
+
+  recordHistory(`Merge ${selectedList.length} Sentences`);
 
   const firstIdx = selectedList[0];
   const lastIdx = selectedList[selectedList.length - 1];
@@ -867,6 +1217,8 @@ async function handleMergeShortBlocks() {
       return;
     }
 
+    recordHistory("Merge Short Sentences");
+
     state.currentProject.blocks = mergedBlocks;
     state.selectedBlockIndices = new Set([0]);
     state.activeBlockIndex = 0;
@@ -895,6 +1247,8 @@ function handleApplyVoiceToAll() {
   const activeBlock = state.currentProject.blocks[activeIdx];
   if (!activeBlock) return;
 
+  recordHistory("Apply Voice to All");
+
   const voice = getVoiceById(activeBlock.voice_id);
   const total = state.currentProject.blocks.length;
 
@@ -921,6 +1275,8 @@ function handleApplyPacingToAll() {
     : (state.selectedBlockIndices && state.selectedBlockIndices.size > 0 ? Array.from(state.selectedBlockIndices)[0] : 0);
   const activeBlock = state.currentProject.blocks[activeIdx];
   if (!activeBlock) return;
+
+  recordHistory("Apply Pacing to All");
 
   const gainVal = activeBlock.gain || 1.0;
   const speedVal = activeBlock.speed || 0.90;
@@ -1055,6 +1411,8 @@ function handleSelectAudioFilter(filterName) {
   // Toggle off if clicking the already active filter (unless selecting 'none')
   const targetFilter = (curFilter === filterName && filterName !== "none") ? "none" : filterName;
 
+  recordHistory(`Acoustic Filter: ${targetFilter === "none" ? "Clean Studio" : targetFilter.toUpperCase()}`);
+
   const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
     ? state.selectedBlockIndices
     : new Set([activeIdx]);
@@ -1066,7 +1424,7 @@ function handleSelectAudioFilter(filterName) {
     b.radio_fx = (targetFilter === "radio");
     delete b.cachedAudioUrl;
     delete b.cachedSig;
-    const row = document.querySelectorAll(".block-row")[idx];
+    const row = document.querySelector(`[data-index="${idx}"]`);
     if (row) {
       row.classList.remove("ready");
       const timeText = row.querySelector(".scrubber-time");
@@ -1124,6 +1482,8 @@ async function handleAutoDirectStory() {
       showToast("⚠️ No changes made to story blocks.");
       return;
     }
+
+    recordHistory("Auto-Direct Story");
 
     let modifiedCount = 0;
     const oldBlocks = state.currentProject.blocks;
@@ -1306,6 +1666,8 @@ function applyDeliveryPreset(presetKey) {
       break;
   }
 
+  recordHistory(`Delivery Preset: ${presetConfig.name}`);
+
   targets.forEach(idx => {
     const block = state.currentProject.blocks[idx];
     if (!block) return;
@@ -1332,8 +1694,16 @@ function applyDeliveryPreset(presetKey) {
 
 async function handleBulkRender() {
   if (!state.currentProject || !state.currentProject.blocks || !state.currentProject.blocks.length) return;
-  const selectedList = Array.from(state.selectedBlockIndices).sort((a, b) => a - b);
-  if (selectedList.length === 0) return;
+  const selectedList = Array.from(state.selectedBlockIndices)
+    .filter(idx => {
+      const b = state.currentProject.blocks[idx];
+      return b && b.type !== "heading" && b.is_spoken !== false;
+    })
+    .sort((a, b) => a - b);
+  if (selectedList.length === 0) {
+    showToast("ℹ️ Selected items contain no spoken sentences to render.");
+    return;
+  }
 
   const btnBulkRender = document.getElementById("btn-bulk-render");
   const isGPU = Boolean(state.config.active && state.config.remote_worker_url);
@@ -1366,8 +1736,8 @@ async function handleBulkRender() {
 
   async function renderSingleSelected(idx) {
     const block = state.currentProject.blocks[idx];
-    if (!block) return;
-    const row = document.querySelectorAll(".block-row")[idx];
+    if (!block || block.type === "heading" || block.is_spoken === false) return;
+    const row = document.querySelector(`[data-index="${idx}"]`);
     const currentSig = getBlockSignature(block);
 
     if (block.cachedAudioUrl && block.cachedSig === currentSig) {
@@ -1455,7 +1825,11 @@ function updateActiveSentenceHint(idx) {
   const block = state.currentProject.blocks[idx];
   if (!block) return;
   const total = state.currentProject.blocks.length;
-  hintEl.textContent = `Sentence ${idx + 1}/${total}: "${block.text.slice(0, 55)}${block.text.length > 55 ? '...' : ''}"`;
+  if (block.type === "heading" || block.is_spoken === false) {
+    hintEl.textContent = `🎬 Item ${idx + 1}/${total}: "${block.text || 'Scene Heading'}" (Non-spoken divider • ${(block.pause_after || 1.0).toFixed(1)}s pause)`;
+  } else {
+    hintEl.textContent = `Sentence ${idx + 1}/${total}: "${block.text.slice(0, 55)}${block.text.length > 55 ? '...' : ''}"`;
+  }
 }
 
 function renderInspector() {
@@ -1565,6 +1939,22 @@ function renderTimeline() {
   if (!state.currentProject || !state.currentProject.blocks) return;
 
   state.currentProject.blocks.forEach((block, idx) => {
+    if (block.type === "heading" || block.is_spoken === false) {
+      const item = document.createElement("div");
+      const isActive = state.activeBlockIndex === idx;
+      const isPlaying = state.currentlyPlayingBlockIdx === idx;
+      item.className = `timeline-block-item heading-item ${isActive ? "active" : ""} ${isPlaying ? "playing" : ""}`;
+      item.textContent = `🎬 ${block.text || "Scene"}`;
+      item.title = `Scene Divider: ${block.text} (Non-spoken • ${block.pause_after || 1.0}s pause)`;
+      item.addEventListener("click", () => {
+        selectBlock(idx);
+        const r = document.querySelectorAll(".scene-divider-row, .block-row")[idx];
+        if (r) r.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      container.appendChild(item);
+      return;
+    }
+
     const voice = getVoiceById(block.voice_id);
     const item = document.createElement("div");
     const currentSig = getBlockSignature(block);
@@ -1599,6 +1989,10 @@ function updateStoryTimeDisplay() {
 
   let totalSec = 0;
   blocks.forEach(b => {
+    if (b.type === "heading" || b.is_spoken === false) {
+      totalSec += (b.pause_after || 1.0);
+      return;
+    }
     if (b.duration) {
       totalSec += b.duration;
     } else {
@@ -1612,7 +2006,11 @@ function updateStoryTimeDisplay() {
   if (state.currentlyPlayingBlockIdx !== null) {
     for (let i = 0; i < state.currentlyPlayingBlockIdx; i++) {
       const b = blocks[i];
-      elapsedSec += b.duration || ((b.text || "").trim().split(/\s+/).length / 2.8 / (b.speed || 0.9));
+      if (b.type === "heading" || b.is_spoken === false) {
+        elapsedSec += (b.pause_after || 1.0);
+      } else {
+        elapsedSec += b.duration || ((b.text || "").trim().split(/\s+/).length / 2.8 / (b.speed || 0.9));
+      }
     }
     elapsedSec += state.storyAudioPlayer.currentTime || 0;
   }
@@ -1642,6 +2040,7 @@ function prefetchNextBlock(idx) {
   const nextIdx = idx + 1;
   if (!state.currentProject || !state.currentProject.blocks || !state.currentProject.blocks[nextIdx]) return;
   const nextBlock = state.currentProject.blocks[nextIdx];
+  if (nextBlock.type === "heading" || nextBlock.is_spoken === false) return;
   if (!nextBlock.text || !nextBlock.text.trim()) return;
   const sig = getBlockSignature(nextBlock);
   if (nextBlock.cachedAudioUrl && nextBlock.cachedSig === sig) {
@@ -1652,7 +2051,7 @@ function prefetchNextBlock(idx) {
     return;
   }
 
-  const nextRow = document.querySelectorAll(".block-row")[nextIdx];
+  const nextRow = document.querySelector(`[data-index="${nextIdx}"]`);
 
   fetch("/api/synthesize_block", {
     method: "POST",
@@ -1690,7 +2089,7 @@ function updatePlaybackUI(idx, isPlaying) {
     masterBtn.textContent = isPlaying ? "⏸" : "▶";
     masterBtn.classList.toggle("playing", isPlaying);
   }
-  const allRows = document.querySelectorAll(".block-row");
+  const allRows = document.querySelectorAll(".block-row, .scene-divider-row");
   allRows.forEach((r, i) => {
     const pb = r.querySelector(".play-block-btn");
     if (i === idx) {
@@ -1714,7 +2113,36 @@ async function playBlockAudio(idx, targetOffset = 0, isAutoContinuation = false)
   }
 
   const block = state.currentProject?.blocks?.[idx];
-  if (!block || !block.text.trim()) {
+  if (!block) {
+    stopStoryPlayback();
+    return;
+  }
+
+  // Non-spoken Scene Heading / Section Divider
+  if (block.type === "heading" || block.is_spoken === false) {
+    selectBlock(idx, "single");
+    state.currentlyPlayingBlockIdx = idx;
+    updatePlaybackUI(idx, true);
+
+    if (state.isPlayingStory) {
+      const pauseGap = Math.max((block.pause_after !== undefined ? block.pause_after : 1.0) * 1000, 300);
+      state.nextSentenceTimer = setTimeout(() => {
+        if (state.isPlayingStory) {
+          if (idx + 1 < (state.currentProject?.blocks?.length || 0)) {
+            playBlockAudio(idx + 1, 0, true);
+          } else {
+            stopStoryPlayback();
+          }
+        }
+      }, pauseGap);
+    } else {
+      showToast(`🎬 Scene Divider: "${block.text || 'Section'}" (Non-spoken • ${(block.pause_after || 1.0).toFixed(1)}s pause)`);
+      setTimeout(() => updatePlaybackUI(idx, false), 800);
+    }
+    return;
+  }
+
+  if (!block.text || !block.text.trim()) {
     if (state.isPlayingStory && idx + 1 < (state.currentProject?.blocks?.length || 0)) {
       playBlockAudio(idx + 1, 0, true);
     } else {
@@ -1740,7 +2168,7 @@ async function playBlockAudio(idx, targetOffset = 0, isAutoContinuation = false)
   selectBlock(idx, "single");
   state.currentlyPlayingBlockIdx = idx;
 
-  const row = document.querySelectorAll(".block-row")[idx];
+  const row = document.querySelector(`[data-index="${idx}"]`);
   const btnEl = row ? row.querySelector(".play-block-btn") : null;
   const currentSig = getBlockSignature(block);
 
@@ -1782,7 +2210,7 @@ async function playBlockAudio(idx, targetOffset = 0, isAutoContinuation = false)
       const dur = state.storyAudioPlayer.duration || block.duration || 1;
       const pct = Math.min((cur / dur) * 100, 100);
 
-      const curRow = document.querySelectorAll(".block-row")[idx];
+      const curRow = document.querySelector(`[data-index="${idx}"]`);
       if (curRow) {
         const fill = curRow.querySelector(".scrubber-fill");
         const timeText = curRow.querySelector(".scrubber-time");
@@ -1793,7 +2221,7 @@ async function playBlockAudio(idx, targetOffset = 0, isAutoContinuation = false)
     };
 
     state.storyAudioPlayer.onended = () => {
-      const curRow = document.querySelectorAll(".block-row")[idx];
+      const curRow = document.querySelector(`[data-index="${idx}"]`);
       if (curRow) {
         curRow.classList.remove("playing");
         const fill = curRow.querySelector(".scrubber-fill");
@@ -2019,10 +2447,14 @@ async function toggleBatchRender() {
 
   for (let i = 0; i < total; i++) {
     const block = blocks[i];
+    if (block.type === "heading" || block.is_spoken === false) {
+      alreadyCachedCount++;
+      continue;
+    }
     const currentSig = getBlockSignature(block);
     if (block.cachedAudioUrl && block.cachedSig === currentSig) {
       alreadyCachedCount++;
-      const row = document.querySelectorAll(".block-row")[i];
+      const row = document.querySelector(`[data-index="${i}"]`);
       if (row) {
         row.classList.add("ready");
         row.classList.remove("processing");
@@ -2104,7 +2536,7 @@ async function toggleBatchRender() {
   // Single sentence render function
   async function renderBlockByIndex(idx) {
     const block = blocks[idx];
-    const row = document.querySelectorAll(".block-row")[idx];
+    const row = document.querySelector(`[data-index="${idx}"]`);
     const playBtn = row ? row.querySelector(".play-block-btn") : null;
     const currentSig = getBlockSignature(block);
 
@@ -2362,6 +2794,8 @@ function playPreRenderedSample(sampleUrl, btnEl) {
 
 function assignVoiceToTarget(voice) {
   if (!state.currentProject || !state.currentProject.blocks) return;
+
+  recordHistory(`Change Voice: ${voice.name}`);
 
   const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 1)
     ? Array.from(state.selectedBlockIndices)
@@ -2868,6 +3302,7 @@ function setupEventListeners() {
   // Add Block button
   document.getElementById("btn-add-block")?.addEventListener("click", () => {
     if (!state.currentProject) return;
+    recordHistory("Add Sentence Block");
     const defs = getProjectDefaultSettings();
     const newIdx = state.currentProject.blocks.length;
     const newBlock = {
@@ -2928,7 +3363,7 @@ function setupEventListeners() {
       block.gain = gainVal;
       delete block.cachedAudioUrl;
       delete block.cachedSig;
-      const row = document.querySelectorAll(".block-row")[idx];
+      const row = document.querySelector(`[data-index="${idx}"]`);
       if (row) {
         row.classList.remove("ready");
         const timeText = row.querySelector(".scrubber-time");
@@ -2938,6 +3373,7 @@ function setupEventListeners() {
     renderTimeline();
     debouncedSave();
   });
+  document.getElementById("slider-volume")?.addEventListener("change", () => recordHistory("Adjust Volume"));
 
   document.getElementById("slider-speed")?.addEventListener("input", (e) => {
     const val = parseFloat(e.target.value);
@@ -2954,7 +3390,7 @@ function setupEventListeners() {
       block.speed = val;
       delete block.cachedAudioUrl;
       delete block.cachedSig;
-      const row = document.querySelectorAll(".block-row")[idx];
+      const row = document.querySelector(`[data-index="${idx}"]`);
       if (row) {
         row.classList.remove("ready");
         const timeText = row.querySelector(".scrubber-time");
@@ -2964,6 +3400,7 @@ function setupEventListeners() {
     renderTimeline();
     debouncedSave();
   });
+  document.getElementById("slider-speed")?.addEventListener("change", () => recordHistory("Adjust Speed"));
 
   document.getElementById("slider-pause")?.addEventListener("input", (e) => {
     const val = parseFloat(e.target.value);
@@ -2981,6 +3418,7 @@ function setupEventListeners() {
     });
     debouncedSave();
   });
+  document.getElementById("slider-pause")?.addEventListener("change", () => recordHistory("Adjust Pause"));
 
   document.getElementById("slider-pitch")?.addEventListener("input", (e) => {
     const val = parseFloat(e.target.value);
@@ -2997,7 +3435,7 @@ function setupEventListeners() {
       block.pitch_shift = val;
       delete block.cachedAudioUrl;
       delete block.cachedSig;
-      const row = document.querySelectorAll(".block-row")[idx];
+      const row = document.querySelector(`[data-index="${idx}"]`);
       if (row) {
         row.classList.remove("ready");
         const timeText = row.querySelector(".scrubber-time");
@@ -3007,6 +3445,7 @@ function setupEventListeners() {
     renderTimeline();
     debouncedSave();
   });
+  document.getElementById("slider-pitch")?.addEventListener("change", () => recordHistory("Adjust Pitch"));
 
   document.getElementById("slider-warmth")?.addEventListener("input", (e) => {
     const val = parseFloat(e.target.value);
@@ -3023,7 +3462,7 @@ function setupEventListeners() {
       block.warmth = val;
       delete block.cachedAudioUrl;
       delete block.cachedSig;
-      const row = document.querySelectorAll(".block-row")[idx];
+      const row = document.querySelector(`[data-index="${idx}"]`);
       if (row) {
         row.classList.remove("ready");
         const timeText = row.querySelector(".scrubber-time");
@@ -3033,6 +3472,7 @@ function setupEventListeners() {
     renderTimeline();
     debouncedSave();
   });
+  document.getElementById("slider-warmth")?.addEventListener("change", () => recordHistory("Adjust Warmth"));
 
   document.getElementById("slider-clarity")?.addEventListener("input", (e) => {
     const val = parseFloat(e.target.value);
@@ -3049,7 +3489,7 @@ function setupEventListeners() {
       block.clarity = val;
       delete block.cachedAudioUrl;
       delete block.cachedSig;
-      const row = document.querySelectorAll(".block-row")[idx];
+      const row = document.querySelector(`[data-index="${idx}"]`);
       if (row) {
         row.classList.remove("ready");
         const timeText = row.querySelector(".scrubber-time");
@@ -3059,6 +3499,7 @@ function setupEventListeners() {
     renderTimeline();
     debouncedSave();
   });
+  document.getElementById("slider-clarity")?.addEventListener("change", () => recordHistory("Adjust Clarity"));
 
   document.getElementById("slider-reverb")?.addEventListener("input", (e) => {
     const val = parseInt(e.target.value, 10);
@@ -3076,7 +3517,7 @@ function setupEventListeners() {
       block.reverb = revRatio;
       delete block.cachedAudioUrl;
       delete block.cachedSig;
-      const row = document.querySelectorAll(".block-row")[idx];
+      const row = document.querySelector(`[data-index="${idx}"]`);
       if (row) {
         row.classList.remove("ready");
         const timeText = row.querySelector(".scrubber-time");
@@ -3086,6 +3527,7 @@ function setupEventListeners() {
     renderTimeline();
     debouncedSave();
   });
+  document.getElementById("slider-reverb")?.addEventListener("change", () => recordHistory("Adjust Reverb"));
 
   // Drawer Search, Sort & Filters
   document.getElementById("drawer-search")?.addEventListener("input", (e) => {
@@ -3114,12 +3556,44 @@ function setupEventListeners() {
 
   document.getElementById("rail-voices-btn")?.addEventListener("click", () => openVoiceDrawer());
 
-  // Keyboard shortcut: Space toggles story playback
+  // Keyboard shortcuts: Space toggles playback, Ctrl+Z undos, Ctrl+Y redos
   window.addEventListener("keydown", (e) => {
+    // Undo: Ctrl+Z or Cmd+Z (when not typing inside an active input/textarea)
+    if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+      if (e.shiftKey) {
+        // Redo: Ctrl+Shift+Z
+        e.preventDefault();
+        handleRedo();
+        return;
+      } else {
+        if (!["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName)) {
+          e.preventDefault();
+          handleUndo();
+          return;
+        }
+      }
+    }
+
+    // Redo: Ctrl+Y or Cmd+Y
+    if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) {
+      if (!["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+    }
+
     if (["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName)) return;
     if (e.code === "Space" && state.currentView === "studio") {
       e.preventDefault();
       handleMasterPlayToggle();
+    }
+  });
+
+  // Close History dropdown on click outside
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#history-dropdown-wrapper")) {
+      closeHistoryDropdown();
     }
   });
 
@@ -3211,6 +3685,8 @@ function splitBlock(idx) {
     return;
   }
 
+  recordHistory(`Split Block ${idx + 1}`);
+
   const defs = getProjectDefaultSettings();
   const baseVoice = block.voice_id || defs.voice_id;
   const baseSpeed = block.speed !== undefined ? block.speed : defs.speed;
@@ -3259,6 +3735,10 @@ function handleAutoSplitAll() {
   const newBlocksList = [];
 
   state.currentProject.blocks.forEach((block) => {
+    if (block.type === "heading" || block.is_spoken === false) {
+      newBlocksList.push(block);
+      return;
+    }
     const sentences = splitTextIntoSentences(block.text || "");
     if (sentences.length > 1) {
       totalSplits += (sentences.length - 1);
@@ -3301,6 +3781,8 @@ function handleAutoSplitAll() {
     return;
   }
 
+  recordHistory("Auto-Split Sentences");
+
   state.currentProject.blocks = newBlocksList;
   state.selectedBlockIndices = new Set([0]);
   state.activeBlockIndex = 0;
@@ -3312,9 +3794,14 @@ function handleAutoSplitAll() {
 function deleteBlock(idx) {
   if (!state.currentProject || !state.currentProject.blocks) return;
   if (state.currentProject.blocks.length <= 1) {
-    showToast("⚠️ Project must have at least one sentence.");
+    showToast("⚠️ Project must have at least one block.");
     return;
   }
+  const deletedItem = state.currentProject.blocks[idx];
+  const itemType = (deletedItem?.type === "heading" || deletedItem?.is_spoken === false) ? "Scene Heading" : "Sentence";
+
+  recordHistory(`Delete ${itemType} (Row ${idx + 1})`);
+
   state.currentProject.blocks.splice(idx, 1);
   const nextSelected = new Set();
   state.selectedBlockIndices.forEach(i => {
@@ -3328,7 +3815,7 @@ function deleteBlock(idx) {
   state.activeBlockIndex = Math.min(state.activeBlockIndex, state.currentProject.blocks.length - 1);
   renderStudio();
   debouncedSave();
-  showToast("✓ Sentence deleted.");
+  showToast(`✓ ${itemType} deleted.`);
 }
 
 function insertBlockAfter(idx) {
@@ -3336,6 +3823,8 @@ function insertBlockAfter(idx) {
   const defs = getProjectDefaultSettings();
   const insertIdx = idx + 1;
   const currentBlock = state.currentProject.blocks[idx] || {};
+
+  recordHistory(`Insert Sentence Block`);
 
   // Inherit voice actor and settings from the adjacent block if available
   const targetVoice = currentBlock.voice_id || defs.voice_id;
@@ -3366,7 +3855,7 @@ function insertBlockAfter(idx) {
 
   // Scroll smoothly to the newly inserted block and focus its textarea
   setTimeout(() => {
-    const rows = document.querySelectorAll(".block-row");
+    const rows = document.querySelectorAll(".block-row, .scene-divider-row");
     const targetRow = rows[insertIdx];
     if (targetRow) {
       targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -3378,6 +3867,105 @@ function insertBlockAfter(idx) {
   }, 40);
 
   showToast(`＋ Inserted new sentence block at position ${insertIdx + 1}!`);
+}
+
+function addNewSceneHeading() {
+  if (!state.currentProject) return;
+  recordHistory("Add Scene Heading");
+  const newIdx = state.currentProject.blocks.length;
+  const headingBlock = {
+    id: "h_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
+    type: "heading",
+    text: "Scene " + (countHeadings() + 1),
+    is_spoken: false,
+    pause_after: 1.0
+  };
+  state.currentProject.blocks.push(headingBlock);
+  renderStudio();
+  selectBlock(newIdx, "single");
+  debouncedSave();
+
+  setTimeout(() => {
+    const rows = document.querySelectorAll(".scene-divider-row, .block-row");
+    const targetRow = rows[newIdx] || rows[rows.length - 1];
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+      const inp = targetRow.querySelector(".scene-title-input");
+      if (inp) {
+        inp.focus();
+        inp.select();
+      }
+    }
+  }, 40);
+  showToast("🎬 Added Scene Heading (non-spoken divider)!");
+}
+
+function insertHeadingAfter(idx) {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  recordHistory(`Insert Scene Heading (Row ${idx + 1})`);
+  const insertIdx = idx + 1;
+  const headingBlock = {
+    id: "h_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
+    type: "heading",
+    text: "Scene " + (countHeadings() + 1),
+    is_spoken: false,
+    pause_after: 1.0
+  };
+  state.currentProject.blocks.splice(insertIdx, 0, headingBlock);
+  renderStudio();
+  selectBlock(insertIdx, "single");
+  debouncedSave();
+
+  setTimeout(() => {
+    const rows = document.querySelectorAll(".scene-divider-row, .block-row");
+    const targetRow = rows[insertIdx];
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+      const inp = targetRow.querySelector(".scene-title-input");
+      if (inp) {
+        inp.focus();
+        inp.select();
+      }
+    }
+  }, 40);
+  showToast(`🎬 Inserted Scene Heading at position ${insertIdx + 1}!`);
+}
+
+function convertHeadingToSpeech(idx) {
+  if (!state.currentProject?.blocks?.[idx]) return;
+  recordHistory("Convert Divider to Speech");
+  const b = state.currentProject.blocks[idx];
+  const defs = getProjectDefaultSettings();
+  b.type = "speech";
+  b.is_spoken = true;
+  b.voice_id = b.voice_id || defs.voice_id;
+  b.speed = b.speed !== undefined ? b.speed : defs.speed;
+  b.gain = b.gain !== undefined ? b.gain : defs.gain;
+  b.pause_after = b.pause_after !== undefined ? b.pause_after : defs.pause_after;
+  b.pitch_shift = b.pitch_shift !== undefined ? b.pitch_shift : defs.pitch_shift;
+  b.warmth = b.warmth !== undefined ? b.warmth : defs.warmth;
+  b.clarity = b.clarity !== undefined ? b.clarity : defs.clarity;
+  b.reverb = b.reverb !== undefined ? b.reverb : defs.reverb;
+  b.fx_filter = b.fx_filter || defs.fx_filter;
+  b.radio_fx = Boolean(b.fx_filter === "radio");
+  renderStudio();
+  debouncedSave();
+  showToast("🎙️ Converted divider to spoken sentence block!");
+}
+
+function convertSpeechToHeading(idx) {
+  if (!state.currentProject?.blocks?.[idx]) return;
+  recordHistory("Convert Sentence to Divider");
+  const b = state.currentProject.blocks[idx];
+  b.type = "heading";
+  b.is_spoken = false;
+  b.pause_after = b.pause_after !== undefined ? b.pause_after : 1.0;
+  delete b.cachedAudioUrl;
+  delete b.cachedSig;
+  delete b.duration;
+  renderStudio();
+  debouncedSave();
+  showToast("🎬 Converted to non-spoken Scene Heading!");
 }
 
 // ---------------- GLOBAL WINDOW EXPORTS FOR INLINE ONCLICK ---------------- //
@@ -3433,3 +4021,12 @@ window.clearNewProjectFile = clearNewProjectFile;
 window.handleImportModalFile = handleImportModalFile;
 window.processImportedFile = processImportedFile;
 window.cleanTitleFromFilename = cleanTitleFromFilename;
+window.handleUndo = handleUndo;
+window.handleRedo = handleRedo;
+window.toggleHistoryDropdown = toggleHistoryDropdown;
+window.revertToHistoryStep = revertToHistoryStep;
+window.addNewSceneHeading = addNewSceneHeading;
+window.insertHeadingAfter = insertHeadingAfter;
+window.convertHeadingToSpeech = convertHeadingToSpeech;
+window.convertSpeechToHeading = convertSpeechToHeading;
+

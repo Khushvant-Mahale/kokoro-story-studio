@@ -74,6 +74,17 @@ class ProjectManager:
             if not text:
                 continue
 
+            # Preserve non-spoken Scene Headings
+            if b.get("type") == "heading" or not b.get("is_spoken", True):
+                expanded_blocks.append({
+                    "id": b.get("id") or f"h_{block_counter}",
+                    "text": text,
+                    "_is_heading": True,
+                    "_orig": b
+                })
+                block_counter += 1
+                continue
+
             if text.endswith(":"):
                 expanded_blocks.append({
                     "id": b.get("id") or f"b_{block_counter}",
@@ -125,6 +136,17 @@ class ProjectManager:
         n = len(expanded_blocks)
 
         for i, item in enumerate(expanded_blocks):
+            if item.get("_is_heading"):
+                orig = item.get("_orig", {})
+                directed_blocks.append({
+                    "id": item.get("id"),
+                    "type": "heading",
+                    "text": item.get("text"),
+                    "is_spoken": False,
+                    "pause_after": float(orig.get("pause_after", 1.2) or 1.2)
+                })
+                continue
+
             text = item["text"]
             orig = item.get("_orig", {})
             prev_text = expanded_blocks[i - 1]["text"] if i > 0 else ""
@@ -271,11 +293,23 @@ class ProjectManager:
         """Splits raw story text into structured sentence blocks and dynamically directs them."""
         lines = [l.strip() for l in raw_text.replace("\r\n", "\n").split("\n") if l.strip()]
         quote_pattern = re.compile(r'([\"“][^\"”]+[\"”])')
-        candidate_sentences = []
+        heading_re = re.compile(
+            r'^(?:#+\s*|(?:scene|chapter|act|part|section)\s+\d+|prologue|epilogue)(?:[:\s\-–—].*)?$',
+            re.IGNORECASE
+        )
+        candidate_items = []
 
         for line in lines:
+            line_str = line.strip()
+            # Check if line is a scene heading / chapter divider
+            if (heading_re.match(line_str) or 
+                (line_str.startswith("[") and line_str.endswith("]") and len(line_str) < 60) or
+                (line_str.startswith("***") and line_str.endswith("***"))):
+                candidate_items.append({"is_heading": True, "text": line_str})
+                continue
+
             if line.endswith(":"):
-                candidate_sentences.append(line)
+                candidate_items.append({"is_heading": False, "text": line})
                 continue
 
             parts = quote_pattern.split(line)
@@ -285,13 +319,15 @@ class ProjectManager:
                     if not part:
                         continue
                     if part.startswith(('"', '“')) and part.endswith(('"', '”')):
-                        candidate_sentences.append(part)
+                        candidate_items.append({"is_heading": False, "text": part})
                     else:
                         sub_sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', part) if s.strip()]
-                        candidate_sentences.extend(sub_sents if sub_sents else [part])
+                        for s in (sub_sents if sub_sents else [part]):
+                            candidate_items.append({"is_heading": False, "text": s})
             else:
                 sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', line) if s.strip()]
-                candidate_sentences.extend(sents if sents else [line])
+                for s in (sents if sents else [line]):
+                    candidate_items.append({"is_heading": False, "text": s})
 
         def_speed = float(defaults.get("speed", 0.90)) if defaults and "speed" in defaults else 0.90
         def_gain = float(defaults.get("gain", 1.0)) if defaults and "gain" in defaults else 1.0
@@ -304,24 +340,33 @@ class ProjectManager:
         def_radio = bool(defaults.get("radio_fx", False)) if defaults and "radio_fx" in defaults else (def_filter == "radio")
 
         initial_blocks = []
-        for idx, sent in enumerate(candidate_sentences, 1):
-            init_b = {
-                "id": f"b_{idx}",
-                "text": sent,
-                "voice_id": default_voice,
-                "speed": round(def_speed, 2),
-                "gain": round(def_gain, 2),
-                "pause_after": round(def_pause, 1),
-                "pitch_shift": round(def_pitch, 1),
-                "warmth": round(def_warmth, 1),
-                "clarity": round(def_clarity, 1),
-                "reverb": round(def_reverb, 2),
-                "fx_filter": def_filter,
-                "radio_fx": def_radio
-            }
-            if defaults and defaults.get("blend_weights"):
-                init_b["blend_weights"] = defaults["blend_weights"]
-            initial_blocks.append(init_b)
+        for idx, item in enumerate(candidate_items, 1):
+            if item.get("is_heading"):
+                initial_blocks.append({
+                    "id": f"h_{idx}",
+                    "type": "heading",
+                    "text": item["text"],
+                    "is_spoken": False,
+                    "pause_after": 1.2
+                })
+            else:
+                init_b = {
+                    "id": f"b_{idx}",
+                    "text": item["text"],
+                    "voice_id": default_voice,
+                    "speed": round(def_speed, 2),
+                    "gain": round(def_gain, 2),
+                    "pause_after": round(def_pause, 1),
+                    "pitch_shift": round(def_pitch, 1),
+                    "warmth": round(def_warmth, 1),
+                    "clarity": round(def_clarity, 1),
+                    "reverb": round(def_reverb, 2),
+                    "fx_filter": def_filter,
+                    "radio_fx": def_radio
+                }
+                if defaults and defaults.get("blend_weights"):
+                    init_b["blend_weights"] = defaults["blend_weights"]
+                initial_blocks.append(init_b)
 
         directed = self.auto_direct_blocks(initial_blocks, default_voice=default_voice, expand_dialogue=True, defaults=defaults)
         return self.merge_ultra_small_blocks(directed)
@@ -329,7 +374,7 @@ class ProjectManager:
     def merge_ultra_small_blocks(self, blocks: List[Dict], max_chars: int = 35, max_words: int = 5, max_merged_chars: int = 160) -> List[Dict]:
         """
         Merges consecutive ultra-small sentence blocks of the same narrator/voice.
-        Preserves dialogue quotes, colons, chapter headers, and character boundaries.
+        Preserves dialogue quotes, colons, chapter headers, scene headings, and character boundaries.
         """
         if not blocks:
             return []
@@ -341,10 +386,19 @@ class ProjectManager:
 
         while i < n:
             curr = dict(blocks[i])
+            if curr.get("type") == "heading" or not curr.get("is_spoken", True):
+                curr["id"] = curr.get("id") or f"h_{counter}"
+                counter += 1
+                merged.append(curr)
+                i += 1
+                continue
+
             curr_text = (curr.get("text") or "").strip()
 
             while i + 1 < n:
                 nxt = blocks[i + 1]
+                if nxt.get("type") == "heading" or not nxt.get("is_spoken", True):
+                    break
                 nxt_text = (nxt.get("text") or "").strip()
 
                 # Voice & Tone matching
