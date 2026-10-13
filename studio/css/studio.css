@@ -844,6 +844,12 @@ input[type="range"]::-webkit-slider-thumb {
   display: block;
 }
 
+.block-textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.55;
+  font-style: italic;
+}
+
 .block-actions {
   display: flex;
   align-items: center;

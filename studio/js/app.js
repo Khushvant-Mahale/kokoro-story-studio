@@ -360,6 +360,8 @@ function showToast(msg) {
 
 function renderBlocks() {
   const container = document.getElementById("story-container");
+  const canvas = document.querySelector(".editor-canvas");
+  const savedScrollTop = canvas ? canvas.scrollTop : 0;
   container.innerHTML = "";
 
   state.currentProject.blocks.forEach((block, idx) => {
@@ -387,7 +389,7 @@ function renderBlocks() {
         </div>
       </button>
       <div class="block-content-col">
-        <textarea class="block-textarea" placeholder="Type sentence here...">${block.text}</textarea>
+        <textarea class="block-textarea" placeholder="Type sentence here...">${block.text || ""}</textarea>
         <div class="block-audio-scrubber" title="Click anywhere to jump & listen from this point">
           <div class="scrubber-track">
             <div class="scrubber-fill"></div>
@@ -426,6 +428,9 @@ function renderBlocks() {
     });
 
     textarea.addEventListener("focus", () => {
+      if (textarea.value === "New sentence..." || textarea.value === "Type sentence here...") {
+        textarea.select();
+      }
       if (!state.selectedBlockIndices.has(idx)) {
         selectBlock(idx, "single");
       } else {
@@ -433,6 +438,14 @@ function renderBlocks() {
         renderInspector();
         highlightTimelineBlock(idx);
         updateActiveSentenceHint(idx);
+      }
+    });
+
+    textarea.addEventListener("keydown", (e) => {
+      // Ctrl+Enter or Cmd+Enter to quickly add the next sentence block
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("btn-add-block")?.click();
       }
     });
 
@@ -514,6 +527,10 @@ function renderBlocks() {
       deleteBlock(idx);
     });
   });
+
+  if (canvas && savedScrollTop > 0) {
+    canvas.scrollTop = savedScrollTop;
+  }
 }
 
 function autoResizeTextarea(el) {
@@ -2848,7 +2865,7 @@ function setupEventListeners() {
     const newIdx = state.currentProject.blocks.length;
     const newBlock = {
       id: "b_" + (newIdx + 1) + "_" + Date.now().toString().slice(-4),
-      text: "New sentence...",
+      text: "",
       voice_id: defs.voice_id,
       speed: defs.speed,
       gain: defs.gain,
@@ -2867,6 +2884,19 @@ function setupEventListeners() {
     renderStudio();
     selectBlock(newIdx, "single");
     debouncedSave();
+
+    // Auto-scroll directly to the new block and immediately focus its textarea for typing
+    setTimeout(() => {
+      const rows = document.querySelectorAll(".block-row");
+      const targetRow = rows[newIdx] || rows[rows.length - 1];
+      if (targetRow) {
+        targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+        const ta = targetRow.querySelector(".block-textarea");
+        if (ta) {
+          ta.focus();
+        }
+      }
+    }, 40);
   });
 
   // Inspector voice trigger
