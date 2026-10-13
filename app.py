@@ -306,7 +306,11 @@ async def handle_get_audio(request):
                 content_type = "audio/wav"
             else:
                 content_type = "audio/mpeg"
-            headers = {"Content-Type": content_type, "Accept-Ranges": "bytes"}
+            headers = {
+                "Content-Type": content_type,
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=31536000, immutable"
+            }
             if p.suffix == ".zip":
                 headers["Content-Disposition"] = f'attachment; filename="{p.name}"'
             return web.FileResponse(p, headers=headers)

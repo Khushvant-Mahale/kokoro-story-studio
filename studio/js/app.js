@@ -398,8 +398,9 @@ function renderBlocks() {
         </div>
       </div>
       <div class="block-actions">
-        <button class="play-block-btn" title="Play sentence (or Space)">${isPlaying ? "🔊" : "▶"}</button>
-        <button class="delete-block-btn" onclick="deleteBlock(${idx})" title="Delete sentence">✕</button>
+        <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert new sentence below (Ctrl+Enter)">＋</button>
+        <button type="button" class="play-block-btn" title="Play sentence (or Space)">${isPlaying ? "🔊" : "▶"}</button>
+        <button type="button" class="delete-block-btn" onclick="deleteBlock(${idx})" title="Delete sentence">✕</button>
       </div>
     `;
 
@@ -442,10 +443,10 @@ function renderBlocks() {
     });
 
     textarea.addEventListener("keydown", (e) => {
-      // Ctrl+Enter or Cmd+Enter to quickly add the next sentence block
+      // Ctrl+Enter or Cmd+Enter to quickly insert the next sentence block right below
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        document.getElementById("btn-add-block")?.click();
+        insertBlockAfter(idx);
       }
     });
 
@@ -1643,7 +1644,13 @@ function prefetchNextBlock(idx) {
   const nextBlock = state.currentProject.blocks[nextIdx];
   if (!nextBlock.text || !nextBlock.text.trim()) return;
   const sig = getBlockSignature(nextBlock);
-  if (nextBlock.cachedAudioUrl && nextBlock.cachedSig === sig) return;
+  if (nextBlock.cachedAudioUrl && nextBlock.cachedSig === sig) {
+    // Preload audio into memory cache so it plays instantly with zero delay on transition!
+    const preloader = new Audio();
+    preloader.preload = "auto";
+    preloader.src = nextBlock.cachedAudioUrl;
+    return;
+  }
 
   const nextRow = document.querySelectorAll(".block-row")[nextIdx];
 
@@ -3324,6 +3331,55 @@ function deleteBlock(idx) {
   showToast("✓ Sentence deleted.");
 }
 
+function insertBlockAfter(idx) {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const defs = getProjectDefaultSettings();
+  const insertIdx = idx + 1;
+  const currentBlock = state.currentProject.blocks[idx] || {};
+
+  // Inherit voice actor and settings from the adjacent block if available
+  const targetVoice = currentBlock.voice_id || defs.voice_id;
+  const targetBlend = currentBlock.blend_weights ? JSON.parse(JSON.stringify(currentBlock.blend_weights)) : (defs.blend_weights ? JSON.parse(JSON.stringify(defs.blend_weights)) : undefined);
+
+  const newBlock = {
+    id: "b_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
+    text: "",
+    voice_id: targetVoice,
+    speed: currentBlock.speed !== undefined ? currentBlock.speed : defs.speed,
+    gain: currentBlock.gain !== undefined ? currentBlock.gain : defs.gain,
+    pause_after: currentBlock.pause_after !== undefined ? currentBlock.pause_after : defs.pause_after,
+    pitch_shift: currentBlock.pitch_shift !== undefined ? currentBlock.pitch_shift : defs.pitch_shift,
+    warmth: currentBlock.warmth !== undefined ? currentBlock.warmth : defs.warmth,
+    clarity: currentBlock.clarity !== undefined ? currentBlock.clarity : defs.clarity,
+    reverb: currentBlock.reverb !== undefined ? currentBlock.reverb : defs.reverb,
+    radio_fx: currentBlock.radio_fx !== undefined ? Boolean(currentBlock.radio_fx) : Boolean(defs.radio_fx),
+    fx_filter: currentBlock.fx_filter || defs.fx_filter || "none"
+  };
+  if (targetBlend) {
+    newBlock.blend_weights = targetBlend;
+  }
+
+  state.currentProject.blocks.splice(insertIdx, 0, newBlock);
+  renderStudio();
+  selectBlock(insertIdx, "single");
+  debouncedSave();
+
+  // Scroll smoothly to the newly inserted block and focus its textarea
+  setTimeout(() => {
+    const rows = document.querySelectorAll(".block-row");
+    const targetRow = rows[insertIdx];
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+      const ta = targetRow.querySelector(".block-textarea");
+      if (ta) {
+        ta.focus();
+      }
+    }
+  }, 40);
+
+  showToast(`＋ Inserted new sentence block at position ${insertIdx + 1}!`);
+}
+
 // ---------------- GLOBAL WINDOW EXPORTS FOR INLINE ONCLICK ---------------- //
 window.toggleSelectAll = toggleSelectAll;
 window.openVoiceDrawer = openVoiceDrawer;
@@ -3338,6 +3394,7 @@ window.getProjectDefaultSettings = getProjectDefaultSettings;
 window.handleToggleRadioFx = handleToggleRadioFx;
 window.handleSelectAudioFilter = handleSelectAudioFilter;
 window.splitBlock = splitBlock;
+window.insertBlockAfter = insertBlockAfter;
 window.handleAutoSplitAll = handleAutoSplitAll;
 window.handleAutoDirectStory = handleAutoDirectStory;
 window.handleMergeShortBlocks = handleMergeShortBlocks;

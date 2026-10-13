@@ -879,6 +879,28 @@ input[type="range"]::-webkit-slider-thumb {
   transform: scale(1.08);
 }
 
+.insert-block-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-subtle);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  transition: all 0.15s;
+}
+
+.insert-block-btn:hover {
+  background: rgba(99, 102, 241, 0.18);
+  color: var(--accent);
+  transform: scale(1.12);
+}
+
 .delete-block-btn {
   width: 28px;
   height: 28px;
