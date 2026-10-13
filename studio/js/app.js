@@ -1023,7 +1023,7 @@ function applyDeliveryPreset(presetKey) {
 
   let presetConfig = {
     name: "Narrator",
-    voice_id: defVoice,
+    voice_id: null,
     speed: 0.90,
     gain: 1.0,
     pause_after: 0.6,
@@ -1039,7 +1039,7 @@ function applyDeliveryPreset(presetKey) {
     case "narrator":
       presetConfig = {
         name: "Narrator",
-        voice_id: defVoice,
+        voice_id: null,
         speed: 0.90,
         gain: 1.0,
         pause_after: 0.6,
@@ -1054,67 +1054,67 @@ function applyDeliveryPreset(presetKey) {
     case "whisper":
       presetConfig = {
         name: "Soft Whisper",
-        voice_id: "af_river",
-        speed: 0.80,
+        voice_id: null,
+        speed: 0.82,
         gain: 0.75,
-        pause_after: 1.0,
+        pause_after: 0.9,
         pitch_shift: -0.5,
         warmth: 0.0,
-        clarity: 2.5,
+        clarity: 3.0,
         reverb: 0.15,
         radio_fx: false,
-        clearBlend: true
+        clearBlend: false
       };
       break;
     case "intense":
       presetConfig = {
         name: "Intense Scream",
-        voice_id: "am_fenrir",
-        speed: 1.04,
-        gain: 1.15,
+        voice_id: null,
+        speed: 1.06,
+        gain: 1.20,
         pause_after: 0.8,
-        pitch_shift: 1.5,
-        warmth: 1.0,
-        clarity: 1.0,
+        pitch_shift: 2.0,
+        warmth: 1.5,
+        clarity: 1.5,
         reverb: 0.0,
         radio_fx: false,
-        clearBlend: true
+        clearBlend: false
       };
       break;
     case "demon":
       presetConfig = {
         name: "Deep Demon",
-        voice_id: "am_fenrir",
-        speed: 0.82,
+        voice_id: null,
+        speed: 0.84,
         gain: 1.10,
         pause_after: 0.9,
         pitch_shift: -3.5,
-        warmth: 4.0,
+        warmth: 4.5,
         clarity: -1.0,
-        reverb: 0.20,
+        reverb: 0.22,
         radio_fx: false,
-        clearBlend: true
+        clearBlend: false
       };
       break;
     case "youth":
       presetConfig = {
         name: "High Pitch / Youth",
-        voice_id: "af_bella",
-        speed: 0.96,
+        voice_id: null,
+        speed: 0.98,
         gain: 0.95,
         pause_after: 0.6,
-        pitch_shift: 3.0,
-        warmth: -1.0,
-        clarity: 2.0,
+        pitch_shift: 3.5,
+        warmth: -1.5,
+        clarity: 2.5,
         reverb: 0.0,
         radio_fx: false,
-        clearBlend: true
+        clearBlend: false
       };
       break;
     case "radio":
       presetConfig = {
         name: "Radio Transceiver",
-        voice_id: defVoice,
+        voice_id: null,
         speed: 0.92,
         gain: 1.0,
         pause_after: 0.7,

@@ -149,6 +149,36 @@ class KokoroEngine:
                 "cached": True
             }
 
+        # Check raw neural audio cache for instant DSP re-sculpting (<0.1s)
+        raw_cache_str = f"{clean_text}__{voice_tag}__{speed:.2f}"
+        raw_cache_hash = hashlib.md5(raw_cache_str.encode("utf-8")).hexdigest()
+        raw_cache_file = CACHE_DIR / f"raw_{raw_cache_hash}.wav"
+
+        if raw_cache_file.exists():
+            try:
+                base_samples, sr = sf.read(str(raw_cache_file))
+                processed = base_samples * gain if gain != 1.0 else base_samples.copy()
+                processed = process_audio_fx(
+                    processed,
+                    sr=self.sample_rate,
+                    pitch_shift_st=pitch_shift_f,
+                    warmth_db=warmth_f,
+                    clarity_db=clarity_f,
+                    reverb_wet=reverb_f,
+                    radio_fx=radio_fx_b
+                )
+                sf.write(str(cache_file), processed, self.sample_rate)
+                duration = len(processed) / self.sample_rate
+                return {
+                    "hash": cache_hash,
+                    "audio_url": f"/api/audio/{cache_hash}.wav",
+                    "duration": round(duration, 2),
+                    "cached": False,
+                    "instant_sculpt": True
+                }
+            except Exception as e:
+                print(f"[KokoroEngine] Instant DSP sculpt fallback ({e})")
+
         # Check remote GPU worker if configured
         if self.remote_url:
             try:
@@ -181,6 +211,12 @@ class KokoroEngine:
                     if audio_bytes and len(audio_bytes) > 100:
                         with open(cache_file, "wb") as f:
                             f.write(audio_bytes)
+                        if pitch_shift_f == 0.0 and warmth_f == 0.0 and clarity_f == 0.0 and reverb_f == 0.0 and not radio_fx_b and gain == 1.0:
+                            try:
+                                with open(raw_cache_file, "wb") as f_raw:
+                                    f_raw.write(audio_bytes)
+                            except Exception:
+                                pass
                         data, sr = sf.read(str(cache_file))
                         duration = len(data) / sr
                         return {
@@ -223,6 +259,12 @@ class KokoroEngine:
                 speed=speed,
                 lang=lang
             )
+
+        # Cache raw neural speech before gain and DSP for future instant re-sculpting (<0.1s)
+        try:
+            sf.write(str(raw_cache_file), raw_samples, self.sample_rate)
+        except Exception:
+            pass
 
         # Apply gain/volume scaling
         if gain != 1.0:
