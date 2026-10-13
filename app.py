@@ -78,6 +78,11 @@ async def handle_synthesize_block(request):
     blend_weights = data.get("blend_weights")
     speed = float(data.get("speed", 0.90))
     gain = float(data.get("gain", 1.0))
+    pitch_shift = float(data.get("pitch_shift", 0.0))
+    warmth = float(data.get("warmth", 0.0))
+    clarity = float(data.get("clarity", 0.0))
+    reverb = float(data.get("reverb", 0.0))
+    radio_fx = bool(data.get("radio_fx", False))
 
     if not text:
         return web.json_response({"error": "Text is required"}, status=400)
@@ -89,7 +94,12 @@ async def handle_synthesize_block(request):
             voice_id=voice_id,
             blend_weights=blend_weights,
             speed=speed,
-            gain=gain
+            gain=gain,
+            pitch_shift=pitch_shift,
+            warmth=warmth,
+            clarity=clarity,
+            reverb=reverb,
+            radio_fx=radio_fx
         )
         return web.json_response(res)
     except Exception as e:
@@ -101,6 +111,11 @@ async def handle_blend_preview(request):
     text = data.get("text", "This is an audition sample for your custom voice blend.").strip()
     blend_weights = data.get("blend_weights", {"am_fenrir": 0.5, "am_onyx": 0.5})
     speed = float(data.get("speed", 0.90))
+    pitch_shift = float(data.get("pitch_shift", 0.0))
+    warmth = float(data.get("warmth", 0.0))
+    clarity = float(data.get("clarity", 0.0))
+    reverb = float(data.get("reverb", 0.0))
+    radio_fx = bool(data.get("radio_fx", False))
 
     try:
         res = await asyncio.to_thread(
@@ -109,7 +124,12 @@ async def handle_blend_preview(request):
             voice_id="custom_blend",
             blend_weights=blend_weights,
             speed=speed,
-            gain=1.0
+            gain=1.0,
+            pitch_shift=pitch_shift,
+            warmth=warmth,
+            clarity=clarity,
+            reverb=reverb,
+            radio_fx=radio_fx
         )
         return web.json_response(res)
     except Exception as e:

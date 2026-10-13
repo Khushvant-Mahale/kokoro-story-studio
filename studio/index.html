@@ -6,7 +6,7 @@
   <title>Kokoro Story Studio — Dashboard & Dynamic TTS</title>
   <link rel="icon" type="image/svg+xml" href="/studio/favicon.svg">
   <link rel="alternate icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/studio/css/studio.css?v=380">
+  <link rel="stylesheet" href="/studio/css/studio.css?v=390">
 </head>
 <body>
 
@@ -152,6 +152,57 @@
           </div>
         </div>
 
+        <!-- Voice Audio Sculpting (Pitch, EQ & Effects) -->
+        <div class="inspector-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span class="section-label">Voice Audio & Tone (DSP)</span>
+            <span style="font-size: 11px; color: #60a5fa; font-weight: 600;">Pro Studio</span>
+          </div>
+
+          <!-- Pitch Shift -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <span title="Shift pitch up or down without changing speech duration">Voice Pitch</span>
+              <span class="control-val" id="val-pitch">0.0 st</span>
+            </div>
+            <input type="range" id="slider-pitch" min="-6.0" max="6.0" step="0.5" value="0.0">
+          </div>
+
+          <!-- Warmth (Low Shelf EQ) -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <span title="Boost deep chest resonance and cinematic bass authority">Warmth (Bass EQ)</span>
+              <span class="control-val" id="val-warmth">0.0 dB</span>
+            </div>
+            <input type="range" id="slider-warmth" min="-6.0" max="6.0" step="0.5" value="0.0">
+          </div>
+
+          <!-- Clarity (High Shelf EQ) -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <span title="Boost air, crisp breath and high-frequency presence">Clarity (Air Presence)</span>
+              <span class="control-val" id="val-clarity">0.0 dB</span>
+            </div>
+            <input type="range" id="slider-clarity" min="-6.0" max="6.0" step="0.5" value="0.0">
+          </div>
+
+          <!-- Atmospheric Reverb -->
+          <div class="control-group">
+            <div class="control-label-row">
+              <span title="Add spatial room ambience or cavern echo">Atmosphere (Reverb)</span>
+              <span class="control-val" id="val-reverb">0%</span>
+            </div>
+            <input type="range" id="slider-reverb" min="0" max="40" step="5" value="0">
+          </div>
+
+          <!-- Walkie-Talkie Radio Filter -->
+          <div style="margin-top: 6px;">
+            <button type="button" class="action-pill-btn" id="btn-toggle-radio-fx" onclick="handleToggleRadioFx()" style="width: 100%; justify-content: center; padding: 6px 10px; font-size: 11.5px; border-radius: 6px;" title="Apply walkie-talkie / vintage emergency radio transceiver bandpass effect">
+              📻 Radio Transceiver Filter: OFF
+            </button>
+          </div>
+        </div>
+
         <!-- Delivery & Character Presets -->
         <div class="inspector-section">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -159,19 +210,28 @@
             <span style="font-size: 11px; color: var(--accent); font-weight: 600;">1-Click</span>
           </div>
           <div class="preset-grid">
-            <button class="preset-pill-btn" onclick="applyDeliveryPreset('narrator')" title="Set as Standard Narrator (0.90x speed, 100% volume, 0.6s pause)">
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('narrator')" title="Set as Standard Narrator (0.90x speed, 100% volume, 0.6s pause, neutral pitch)">
               🎙️ Narrator
             </button>
-            <button class="preset-pill-btn" onclick="applyDeliveryPreset('whisper')" title="Set as Soft Ghostly Whisper (River/Echo, 0.80x speed, 75% volume, 1.0s pause)">
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('whisper')" title="Set as Soft Ghostly Whisper (River/Echo, 0.80x speed, 75% volume, +2dB clarity, 15% reverb)">
               🤫 Soft Whisper
             </button>
-            <button class="preset-pill-btn" onclick="applyDeliveryPreset('intense')" title="Set as Screamed / Panicked / High Tension (Fenrir, 1.04x speed, 115% volume, 0.8s pause)">
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('intense')" title="Set as Screamed / Panicked (Fenrir, 1.04x speed, 115% volume, +1.5st pitch)">
               😱 Intense Scream
             </button>
-            <button class="preset-pill-btn" onclick="applyDeliveryPreset('female')" title="Set as Natural Female Character (Heart, 0.86x speed, 100% volume, 0.8s pause)">
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('demon')" title="Set as Ominous Demon / Monster (-3.5st pitch, +4dB warmth, 20% cavern reverb)">
+              👹 Deep Demon
+            </button>
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('youth')" title="Set as Youth / Child / Fairy (+3.0st pitch, -1dB warmth, +2dB clarity)">
+              🧚 High Pitch / Youth
+            </button>
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('radio')" title="Set as Walkie-Talkie Transmission (Vintage Radio Filter ON, +1dB clarity)">
+              📻 Radio Transceiver
+            </button>
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('female')" title="Set as Natural Female Character (Heart, 0.86x speed, 100% volume)">
               👩 Female Dialogue
             </button>
-            <button class="preset-pill-btn" onclick="applyDeliveryPreset('male')" title="Set as Distinct Male Character (Michael, 0.88x speed, 100% volume, 0.8s pause)">
+            <button class="preset-pill-btn" onclick="applyDeliveryPreset('male')" title="Set as Distinct Male Character (Michael, 0.88x speed, 100% volume)">
               👨 Male Dialogue
             </button>
           </div>
@@ -184,8 +244,8 @@
             <button class="btn btn-secondary" id="btn-apply-voice-to-all" onclick="handleApplyVoiceToAll()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Set this voice on ALL sentences in your project">
               🎭 Apply Voice to All Sentences
             </button>
-            <button class="btn btn-secondary" id="btn-apply-pacing-to-all" onclick="handleApplyPacingToAll()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Set current speed, volume and pause on ALL sentences">
-              ⚡ Apply Pacing/Speed to All
+            <button class="btn btn-secondary" id="btn-apply-pacing-to-all" onclick="handleApplyPacingToAll()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Set current speed, volume, pause, pitch and EQ on ALL sentences">
+              ⚡ Apply Pacing, Pitch & EQ to All
             </button>
           </div>
         </div>
@@ -486,6 +546,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=380"></script>
+  <script src="/studio/js/app.js?v=390"></script>
 </body>
 </html>

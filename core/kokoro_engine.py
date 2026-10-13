@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import soundfile as sf
 from kokoro_onnx import Kokoro
+from core.audio_dsp import process_audio_fx
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = BASE_DIR / "models"
@@ -104,6 +105,11 @@ class KokoroEngine:
         blend_weights: Optional[Dict[str, float]] = None,
         speed: float = 0.90,
         gain: float = 1.0,
+        pitch_shift: float = 0.0,
+        warmth: float = 0.0,
+        clarity: float = 0.0,
+        reverb: float = 0.0,
+        radio_fx: bool = False,
         lang: str = "en-us"
     ) -> Dict:
         """
@@ -119,7 +125,16 @@ class KokoroEngine:
         if blend_weights and voice_id not in self.preset_blends:
             voice_tag = "blend_" + "_".join(f"{k}:{v:.2f}" for k, v in sorted(blend_weights.items()))
 
-        cache_str = f"{clean_text}__{voice_tag}__{speed:.2f}__{gain:.2f}"
+        pitch_shift_f = float(pitch_shift or 0.0)
+        warmth_f = float(warmth or 0.0)
+        clarity_f = float(clarity or 0.0)
+        reverb_f = float(reverb or 0.0)
+        radio_fx_b = bool(radio_fx)
+
+        cache_str = (
+            f"{clean_text}__{voice_tag}__{speed:.2f}__{gain:.2f}__"
+            f"{pitch_shift_f:.1f}__{warmth_f:.1f}__{clarity_f:.1f}__{reverb_f:.2f}__{int(radio_fx_b)}"
+        )
         cache_hash = hashlib.md5(cache_str.encode("utf-8")).hexdigest()
         cache_file = CACHE_DIR / f"{cache_hash}.wav"
 
@@ -146,6 +161,11 @@ class KokoroEngine:
                     "blend_weights": blend_weights,
                     "speed": speed,
                     "gain": gain,
+                    "pitch_shift": pitch_shift_f,
+                    "warmth": warmth_f,
+                    "clarity": clarity_f,
+                    "reverb": reverb_f,
+                    "radio_fx": radio_fx_b,
                     "lang": lang
                 }).encode("utf-8")
                 req = urllib.request.Request(
@@ -208,6 +228,17 @@ class KokoroEngine:
         if gain != 1.0:
             raw_samples = raw_samples * gain
 
+        # Apply voice audio DSP: pitch shift, warmth EQ, clarity air, reverb & radio filter
+        raw_samples = process_audio_fx(
+            raw_samples,
+            sr=self.sample_rate,
+            pitch_shift_st=pitch_shift_f,
+            warmth_db=warmth_f,
+            clarity_db=clarity_f,
+            reverb_wet=reverb_f,
+            radio_fx=radio_fx_b
+        )
+
         # Save to cache
         sf.write(str(cache_file), raw_samples, self.sample_rate)
         duration = len(raw_samples) / self.sample_rate
@@ -234,10 +265,26 @@ class KokoroEngine:
             blend_weights = b.get("blend_weights")
             speed = float(b.get("speed", 0.90))
             gain = float(b.get("gain", 1.0))
+            pitch_shift = float(b.get("pitch_shift", 0.0))
+            warmth = float(b.get("warmth", 0.0))
+            clarity = float(b.get("clarity", 0.0))
+            reverb = float(b.get("reverb", 0.0))
+            radio_fx = bool(b.get("radio_fx", False))
             pause_after = float(b.get("pause_after", 0.6))
 
             # Fetch or generate block audio
-            res = self.synthesize_block(text, voice_id, blend_weights, speed, gain)
+            res = self.synthesize_block(
+                text=text,
+                voice_id=voice_id,
+                blend_weights=blend_weights,
+                speed=speed,
+                gain=gain,
+                pitch_shift=pitch_shift,
+                warmth=warmth,
+                clarity=clarity,
+                reverb=reverb,
+                radio_fx=radio_fx
+            )
             cache_file = CACHE_DIR / f"{res['hash']}.wav"
             samples, _ = sf.read(str(cache_file))
             audio_segments.append(samples)
@@ -279,8 +326,24 @@ class KokoroEngine:
                 blend_weights = b.get("blend_weights")
                 speed = float(b.get("speed", 0.90))
                 gain = float(b.get("gain", 1.0))
+                pitch_shift_f = float(b.get("pitch_shift", 0.0) or 0.0)
+                warmth_f = float(b.get("warmth", 0.0) or 0.0)
+                clarity_f = float(b.get("clarity", 0.0) or 0.0)
+                reverb_f = float(b.get("reverb", 0.0) or 0.0)
+                radio_fx_b = bool(b.get("radio_fx", False))
 
-                res = self.synthesize_block(text, voice_id, blend_weights, speed, gain)
+                res = self.synthesize_block(
+                    text,
+                    voice_id,
+                    blend_weights,
+                    speed,
+                    gain,
+                    pitch_shift=pitch_shift_f,
+                    warmth=warmth_f,
+                    clarity=clarity_f,
+                    reverb=reverb_f,
+                    radio_fx=radio_fx_b,
+                )
                 cache_file = CACHE_DIR / f"{res['hash']}.wav"
 
                 # Generate clean filename: 001_sentence_slug.wav

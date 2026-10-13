@@ -197,11 +197,16 @@ function getBlockSignature(block) {
   const voice = block.voice_id || "";
   const speed = Number(block.speed || 0.90).toFixed(2);
   const gain = Number(block.gain || 1.0).toFixed(2);
+  const pitch = Number(block.pitch_shift || 0.0).toFixed(1);
+  const warmth = Number(block.warmth || 0.0).toFixed(1);
+  const clarity = Number(block.clarity || 0.0).toFixed(1);
+  const reverb = Number(block.reverb || 0.0).toFixed(2);
+  const radio = block.radio_fx ? 1 : 0;
   let blendStr = "";
   if (block.blend_weights) {
     blendStr = Object.entries(block.blend_weights).sort().map(([k, v]) => `${k}:${Number(v).toFixed(2)}`).join(",");
   }
-  return `${text}__${voice}__${blendStr}__${speed}__${gain}`;
+  return `${text}__${voice}__${blendStr}__${speed}__${gain}__${pitch}__${warmth}__${clarity}__${reverb}__${radio}`;
 }
 
 function getVoiceById(voiceId) {
@@ -885,19 +890,63 @@ function handleApplyPacingToAll() {
   const gainVal = activeBlock.gain || 1.0;
   const speedVal = activeBlock.speed || 0.90;
   const pauseVal = activeBlock.pause_after || 0.6;
+  const pitchVal = Number(activeBlock.pitch_shift || 0.0);
+  const warmthVal = Number(activeBlock.warmth || 0.0);
+  const clarityVal = Number(activeBlock.clarity || 0.0);
+  const reverbVal = Number(activeBlock.reverb || 0.0);
+  const radioVal = Boolean(activeBlock.radio_fx);
   const total = state.currentProject.blocks.length;
 
   state.currentProject.blocks.forEach(b => {
     b.gain = gainVal;
     b.speed = speedVal;
     b.pause_after = pauseVal;
+    b.pitch_shift = pitchVal;
+    b.warmth = warmthVal;
+    b.clarity = clarityVal;
+    b.reverb = reverbVal;
+    b.radio_fx = radioVal;
     delete b.cachedAudioUrl;
     delete b.cachedSig;
   });
 
   renderStudio();
   debouncedSave();
-  showToast(`⚡ Applied pacing (${speedVal}x speed, ${Math.round(gainVal * 100)}% vol) to all ${total} sentences!`);
+  showToast(`⚡ Applied pacing, pitch & EQ (${speedVal}x speed, ${Math.round(gainVal * 100)}% vol, ${pitchVal > 0 ? '+' : ''}${pitchVal.toFixed(1)}st) to all ${total} sentences!`);
+}
+
+function handleToggleRadioFx() {
+  if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : (state.selectedBlockIndices && state.selectedBlockIndices.size > 0 ? Array.from(state.selectedBlockIndices)[0] : 0);
+  const activeBlock = state.currentProject.blocks[activeIdx];
+  if (!activeBlock) return;
+
+  const newState = !activeBlock.radio_fx;
+
+  const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
+    ? state.selectedBlockIndices
+    : new Set([activeIdx]);
+
+  targets.forEach(idx => {
+    const b = state.currentProject.blocks[idx];
+    if (!b) return;
+    b.radio_fx = newState;
+    delete b.cachedAudioUrl;
+    delete b.cachedSig;
+    const row = document.querySelectorAll(".block-row")[idx];
+    if (row) {
+      row.classList.remove("ready");
+      const timeText = row.querySelector(".scrubber-time");
+      if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+    }
+  });
+
+  renderInspector();
+  renderTimeline();
+  debouncedSave();
+  showToast(`📻 Radio Transceiver Filter: ${newState ? "ON" : "OFF"} (${targets.size} sentence${targets.size > 1 ? "s" : ""})`);
 }
 
 async function handleAutoDirectStory() {
@@ -978,6 +1027,11 @@ function applyDeliveryPreset(presetKey) {
     speed: 0.90,
     gain: 1.0,
     pause_after: 0.6,
+    pitch_shift: 0.0,
+    warmth: 0.0,
+    clarity: 0.0,
+    reverb: 0.0,
+    radio_fx: false,
     clearBlend: false
   };
 
@@ -989,6 +1043,11 @@ function applyDeliveryPreset(presetKey) {
         speed: 0.90,
         gain: 1.0,
         pause_after: 0.6,
+        pitch_shift: 0.0,
+        warmth: 0.0,
+        clarity: 0.0,
+        reverb: 0.0,
+        radio_fx: false,
         clearBlend: false
       };
       break;
@@ -999,6 +1058,11 @@ function applyDeliveryPreset(presetKey) {
         speed: 0.80,
         gain: 0.75,
         pause_after: 1.0,
+        pitch_shift: -0.5,
+        warmth: 0.0,
+        clarity: 2.5,
+        reverb: 0.15,
+        radio_fx: false,
         clearBlend: true
       };
       break;
@@ -1009,7 +1073,57 @@ function applyDeliveryPreset(presetKey) {
         speed: 1.04,
         gain: 1.15,
         pause_after: 0.8,
+        pitch_shift: 1.5,
+        warmth: 1.0,
+        clarity: 1.0,
+        reverb: 0.0,
+        radio_fx: false,
         clearBlend: true
+      };
+      break;
+    case "demon":
+      presetConfig = {
+        name: "Deep Demon",
+        voice_id: "am_fenrir",
+        speed: 0.82,
+        gain: 1.10,
+        pause_after: 0.9,
+        pitch_shift: -3.5,
+        warmth: 4.0,
+        clarity: -1.0,
+        reverb: 0.20,
+        radio_fx: false,
+        clearBlend: true
+      };
+      break;
+    case "youth":
+      presetConfig = {
+        name: "High Pitch / Youth",
+        voice_id: "af_bella",
+        speed: 0.96,
+        gain: 0.95,
+        pause_after: 0.6,
+        pitch_shift: 3.0,
+        warmth: -1.0,
+        clarity: 2.0,
+        reverb: 0.0,
+        radio_fx: false,
+        clearBlend: true
+      };
+      break;
+    case "radio":
+      presetConfig = {
+        name: "Radio Transceiver",
+        voice_id: defVoice,
+        speed: 0.92,
+        gain: 1.0,
+        pause_after: 0.7,
+        pitch_shift: 0.0,
+        warmth: 0.0,
+        clarity: 1.5,
+        reverb: 0.0,
+        radio_fx: true,
+        clearBlend: false
       };
       break;
     case "female":
@@ -1019,6 +1133,11 @@ function applyDeliveryPreset(presetKey) {
         speed: 0.86,
         gain: 1.0,
         pause_after: 0.8,
+        pitch_shift: 0.0,
+        warmth: 0.0,
+        clarity: 0.5,
+        reverb: 0.0,
+        radio_fx: false,
         clearBlend: true
       };
       break;
@@ -1029,6 +1148,11 @@ function applyDeliveryPreset(presetKey) {
         speed: 0.88,
         gain: 1.0,
         pause_after: 0.8,
+        pitch_shift: 0.0,
+        warmth: 0.5,
+        clarity: 0.0,
+        reverb: 0.0,
+        radio_fx: false,
         clearBlend: true
       };
       break;
@@ -1041,6 +1165,11 @@ function applyDeliveryPreset(presetKey) {
     block.speed = presetConfig.speed;
     block.gain = presetConfig.gain;
     block.pause_after = presetConfig.pause_after;
+    block.pitch_shift = presetConfig.pitch_shift;
+    block.warmth = presetConfig.warmth;
+    block.clarity = presetConfig.clarity;
+    block.reverb = presetConfig.reverb;
+    block.radio_fx = presetConfig.radio_fx;
     if (presetConfig.clearBlend) {
       delete block.blend_weights;
     }
@@ -1112,7 +1241,12 @@ async function handleBulkRender() {
           voice_id: block.voice_id,
           blend_weights: block.blend_weights,
           speed: block.speed || 0.90,
-          gain: block.gain || 1.0
+          gain: block.gain || 1.0,
+          pitch_shift: block.pitch_shift || 0.0,
+          warmth: block.warmth || 0.0,
+          clarity: block.clarity || 0.0,
+          reverb: block.reverb || 0.0,
+          radio_fx: Boolean(block.radio_fx)
         })
       });
 
@@ -1221,6 +1355,54 @@ function renderInspector() {
     const valPause = document.getElementById("val-pause");
     if (valPause) valPause.textContent = pauseSlider.value + "s";
   }
+
+  // DSP Controls
+  const pitchSlider = document.getElementById("slider-pitch");
+  if (pitchSlider) {
+    const pVal = Number(block.pitch_shift || 0.0);
+    pitchSlider.value = pVal.toFixed(1);
+    const valPitch = document.getElementById("val-pitch");
+    if (valPitch) valPitch.textContent = (pVal > 0 ? `+${pVal.toFixed(1)}` : pVal.toFixed(1)) + " st";
+  }
+
+  const warmthSlider = document.getElementById("slider-warmth");
+  if (warmthSlider) {
+    const wVal = Number(block.warmth || 0.0);
+    warmthSlider.value = wVal.toFixed(1);
+    const valWarmth = document.getElementById("val-warmth");
+    if (valWarmth) valWarmth.textContent = (wVal > 0 ? `+${wVal.toFixed(1)}` : wVal.toFixed(1)) + " dB";
+  }
+
+  const claritySlider = document.getElementById("slider-clarity");
+  if (claritySlider) {
+    const cVal = Number(block.clarity || 0.0);
+    claritySlider.value = cVal.toFixed(1);
+    const valClarity = document.getElementById("val-clarity");
+    if (valClarity) valClarity.textContent = (cVal > 0 ? `+${cVal.toFixed(1)}` : cVal.toFixed(1)) + " dB";
+  }
+
+  const reverbSlider = document.getElementById("slider-reverb");
+  if (reverbSlider) {
+    const rVal = Math.round(Number(block.reverb || 0.0) * 100);
+    reverbSlider.value = rVal;
+    const valReverb = document.getElementById("val-reverb");
+    if (valReverb) valReverb.textContent = rVal + "%";
+  }
+
+  const radioBtn = document.getElementById("btn-toggle-radio-fx");
+  if (radioBtn) {
+    const isRadio = Boolean(block.radio_fx);
+    radioBtn.textContent = isRadio ? "📻 Radio Transceiver Filter: ON" : "📻 Radio Transceiver Filter: OFF";
+    if (isRadio) {
+      radioBtn.style.backgroundColor = "rgba(234, 88, 12, 0.25)";
+      radioBtn.style.borderColor = "var(--primary)";
+      radioBtn.style.color = "#ffedd5";
+    } else {
+      radioBtn.style.backgroundColor = "transparent";
+      radioBtn.style.borderColor = "var(--border)";
+      radioBtn.style.color = "var(--text-subtle)";
+    }
+  }
 }
 
 function renderTimeline() {
@@ -1322,7 +1504,12 @@ function prefetchNextBlock(idx) {
       voice_id: nextBlock.voice_id,
       blend_weights: nextBlock.blend_weights,
       speed: nextBlock.speed || 0.90,
-      gain: nextBlock.gain || 1.0
+      gain: nextBlock.gain || 1.0,
+      pitch_shift: nextBlock.pitch_shift || 0.0,
+      warmth: nextBlock.warmth || 0.0,
+      clarity: nextBlock.clarity || 0.0,
+      reverb: nextBlock.reverb || 0.0,
+      radio_fx: Boolean(nextBlock.radio_fx)
     })
   })
     .then(r => r.json())
@@ -1497,7 +1684,12 @@ async function playBlockAudio(idx, targetOffset = 0, isAutoContinuation = false)
         voice_id: block.voice_id,
         blend_weights: block.blend_weights,
         speed: block.speed || 0.90,
-        gain: block.gain || 1.0
+        gain: block.gain || 1.0,
+        pitch_shift: block.pitch_shift || 0.0,
+        warmth: block.warmth || 0.0,
+        clarity: block.clarity || 0.0,
+        reverb: block.reverb || 0.0,
+        radio_fx: Boolean(block.radio_fx)
       })
     });
 
@@ -1773,7 +1965,12 @@ async function toggleBatchRender() {
           voice_id: block.voice_id,
           blend_weights: block.blend_weights,
           speed: block.speed || 0.90,
-          gain: block.gain || 1.0
+          gain: block.gain || 1.0,
+          pitch_shift: block.pitch_shift || 0.0,
+          warmth: block.warmth || 0.0,
+          clarity: block.clarity || 0.0,
+          reverb: block.reverb || 0.0,
+          radio_fx: Boolean(block.radio_fx)
         })
       });
 
@@ -2599,6 +2796,111 @@ function setupEventListeners() {
     debouncedSave();
   });
 
+  document.getElementById("slider-pitch")?.addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    document.getElementById("val-pitch").textContent = (val > 0 ? `+${val.toFixed(1)}` : val.toFixed(1)) + " st";
+    if (!state.currentProject || !state.currentProject.blocks) return;
+
+    const targets = state.selectedBlockIndices && state.selectedBlockIndices.size > 0
+      ? state.selectedBlockIndices
+      : new Set([state.activeBlockIndex]);
+
+    targets.forEach(idx => {
+      const block = state.currentProject.blocks[idx];
+      if (!block) return;
+      block.pitch_shift = val;
+      delete block.cachedAudioUrl;
+      delete block.cachedSig;
+      const row = document.querySelectorAll(".block-row")[idx];
+      if (row) {
+        row.classList.remove("ready");
+        const timeText = row.querySelector(".scrubber-time");
+        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      }
+    });
+    renderTimeline();
+    debouncedSave();
+  });
+
+  document.getElementById("slider-warmth")?.addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    document.getElementById("val-warmth").textContent = (val > 0 ? `+${val.toFixed(1)}` : val.toFixed(1)) + " dB";
+    if (!state.currentProject || !state.currentProject.blocks) return;
+
+    const targets = state.selectedBlockIndices && state.selectedBlockIndices.size > 0
+      ? state.selectedBlockIndices
+      : new Set([state.activeBlockIndex]);
+
+    targets.forEach(idx => {
+      const block = state.currentProject.blocks[idx];
+      if (!block) return;
+      block.warmth = val;
+      delete block.cachedAudioUrl;
+      delete block.cachedSig;
+      const row = document.querySelectorAll(".block-row")[idx];
+      if (row) {
+        row.classList.remove("ready");
+        const timeText = row.querySelector(".scrubber-time");
+        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      }
+    });
+    renderTimeline();
+    debouncedSave();
+  });
+
+  document.getElementById("slider-clarity")?.addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    document.getElementById("val-clarity").textContent = (val > 0 ? `+${val.toFixed(1)}` : val.toFixed(1)) + " dB";
+    if (!state.currentProject || !state.currentProject.blocks) return;
+
+    const targets = state.selectedBlockIndices && state.selectedBlockIndices.size > 0
+      ? state.selectedBlockIndices
+      : new Set([state.activeBlockIndex]);
+
+    targets.forEach(idx => {
+      const block = state.currentProject.blocks[idx];
+      if (!block) return;
+      block.clarity = val;
+      delete block.cachedAudioUrl;
+      delete block.cachedSig;
+      const row = document.querySelectorAll(".block-row")[idx];
+      if (row) {
+        row.classList.remove("ready");
+        const timeText = row.querySelector(".scrubber-time");
+        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      }
+    });
+    renderTimeline();
+    debouncedSave();
+  });
+
+  document.getElementById("slider-reverb")?.addEventListener("input", (e) => {
+    const val = parseInt(e.target.value, 10);
+    document.getElementById("val-reverb").textContent = val + "%";
+    if (!state.currentProject || !state.currentProject.blocks) return;
+    const revRatio = val / 100.0;
+
+    const targets = state.selectedBlockIndices && state.selectedBlockIndices.size > 0
+      ? state.selectedBlockIndices
+      : new Set([state.activeBlockIndex]);
+
+    targets.forEach(idx => {
+      const block = state.currentProject.blocks[idx];
+      if (!block) return;
+      block.reverb = revRatio;
+      delete block.cachedAudioUrl;
+      delete block.cachedSig;
+      const row = document.querySelectorAll(".block-row")[idx];
+      if (row) {
+        row.classList.remove("ready");
+        const timeText = row.querySelector(".scrubber-time");
+        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      }
+    });
+    renderTimeline();
+    debouncedSave();
+  });
+
   // Drawer Search, Sort & Filters
   document.getElementById("drawer-search")?.addEventListener("input", (e) => {
     state.searchQuery = e.target.value;
@@ -2828,6 +3130,7 @@ window.handleBulkDelete = handleBulkDelete;
 window.handleMakeDefaultVoice = handleMakeDefaultVoice;
 window.handleApplyVoiceToAll = handleApplyVoiceToAll;
 window.handleApplyPacingToAll = handleApplyPacingToAll;
+window.handleToggleRadioFx = handleToggleRadioFx;
 window.splitBlock = splitBlock;
 window.handleAutoSplitAll = handleAutoSplitAll;
 window.handleAutoDirectStory = handleAutoDirectStory;

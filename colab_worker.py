@@ -178,6 +178,106 @@ try:
 except Exception as e:
     print("Warmup warning:", e)
 
+# ----------------- 3.5 AUDIO DSP (PITCH, EQ, REVERB, RADIO FX) ----------------- #
+try:
+    import scipy.signal as signal
+    HAS_SCIPY = True
+except ImportError:
+    signal = None
+    HAS_SCIPY = False
+
+def phase_vocoder(d, rate, hop_length=256):
+    time_steps = np.arange(0, d.shape[1], rate, dtype=np.float64)
+    d_stretch = np.zeros((d.shape[0], len(time_steps)), dtype=np.complex128)
+    phi_advance = np.linspace(0, np.pi * hop_length, d.shape[0])
+    phase_acc = np.angle(d[:, 0])
+    padding = [(0, 0), (0, 2)]
+    d_padded = np.pad(d, padding, mode="constant")
+    for t, step in enumerate(time_steps):
+        s = int(step)
+        f = step - s
+        col1 = d_padded[:, s]
+        col2 = d_padded[:, s + 1]
+        mag = (1.0 - f) * np.abs(col1) + f * np.abs(col2)
+        d_stretch[:, t] = mag * np.exp(1j * phase_acc)
+        dphase = np.angle(col2) - np.angle(col1) - phi_advance
+        dphase = dphase - 2.0 * np.pi * np.round(dphase / (2.0 * np.pi))
+        phase_acc += phi_advance + dphase
+    return d_stretch
+
+def process_audio_fx(samples, sr=24000, pitch_shift_st=0.0, warmth_db=0.0, clarity_db=0.0, reverb_wet=0.0, radio_fx=False):
+    if samples is None or len(samples) == 0:
+        return samples
+    out = samples.copy()
+    if HAS_SCIPY and abs(pitch_shift_st) >= 0.05 and len(out) >= 512:
+        try:
+            factor = 2.0 ** (float(pitch_shift_st) / 12.0)
+            n_fft, hop = 1024, 256
+            _, _, zxx = signal.stft(out, fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+            z_stretch = phase_vocoder(zxx, factor, hop_length=hop)
+            _, y_stretch = signal.istft(z_stretch, fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+            target_len = len(out)
+            out = signal.resample(y_stretch, target_len).astype(np.float32) if len(y_stretch) != target_len else y_stretch.astype(np.float32)
+        except Exception:
+            pass
+
+    if HAS_SCIPY and (abs(warmth_db) >= 0.1 or abs(clarity_db) >= 0.1):
+        try:
+            if abs(warmth_db) >= 0.1:
+                A = 10.0 ** (float(warmth_db) / 40.0)
+                w0 = 2.0 * np.pi * 220.0 / sr
+                alpha = np.sin(w0) / (2.0 * 0.707)
+                cos_w0 = np.cos(w0)
+                a0 = (A + 1.0) + (A - 1.0) * cos_w0 + 2.0 * np.sqrt(A) * alpha
+                b0 = A * ((A + 1.0) - (A - 1.0) * cos_w0 + 2.0 * np.sqrt(A) * alpha)
+                b1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * cos_w0)
+                b2 = A * ((A + 1.0) - (A - 1.0) * cos_w0 - 2.0 * np.sqrt(A) * alpha)
+                a1 = -2.0 * ((A - 1.0) + (A + 1.0) * cos_w0)
+                a2 = (A + 1.0) + (A - 1.0) * cos_w0 - 2.0 * np.sqrt(A) * alpha
+                out = signal.lfilter(np.array([b0, b1, b2]) / a0, np.array([a0, a1, a2]) / a0, out)
+            if abs(clarity_db) >= 0.1:
+                A = 10.0 ** (float(clarity_db) / 40.0)
+                w0 = 2.0 * np.pi * 4500.0 / sr
+                alpha = np.sin(w0) / (2.0 * 0.707)
+                cos_w0 = np.cos(w0)
+                a0 = (A + 1.0) - (A - 1.0) * cos_w0 + 2.0 * np.sqrt(A) * alpha
+                b0 = A * ((A + 1.0) + (A - 1.0) * cos_w0 + 2.0 * np.sqrt(A) * alpha)
+                b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cos_w0)
+                b2 = A * ((A + 1.0) + (A - 1.0) * cos_w0 - 2.0 * np.sqrt(A) * alpha)
+                a1 = 2.0 * ((A - 1.0) - (A + 1.0) * cos_w0)
+                a2 = (A + 1.0) - (A - 1.0) * cos_w0 - 2.0 * np.sqrt(A) * alpha
+                out = signal.lfilter(np.array([b0, b1, b2]) / a0, np.array([a0, a1, a2]) / a0, out)
+        except Exception:
+            pass
+
+    if HAS_SCIPY and radio_fx and len(out) >= 64:
+        try:
+            b, a = signal.butter(4, [400.0 / (sr / 2.0), 3400.0 / (sr / 2.0)], btype="band")
+            out = np.tanh(signal.lfilter(b, a, out) * 1.6) * 0.85
+        except Exception:
+            pass
+
+    if HAS_SCIPY and reverb_wet > 0.02 and len(out) >= 1000:
+        try:
+            wet = min(float(reverb_wet), 0.50)
+            comb_delays = [int(sr * d) for d in [0.0297, 0.0371, 0.0411, 0.0437]]
+            comb_gains = [0.75, 0.73, 0.71, 0.69]
+            accum = np.zeros_like(out)
+            for d, g in zip(comb_delays, comb_gains):
+                b = np.zeros(d + 1); b[0] = 1.0
+                a = np.zeros(d + 1); a[0] = 1.0; a[d] = -g
+                accum += signal.lfilter(b, a, out)
+            comb_out = accum / len(comb_delays)
+            ap_d = int(sr * 0.005)
+            ap_b = np.zeros(ap_d + 1); ap_b[0] = -0.7; ap_b[ap_d] = 1.0
+            ap_a = np.zeros(ap_d + 1); ap_a[0] = 1.0; ap_a[ap_d] = -0.7
+            wet_sig = signal.lfilter(ap_b, ap_a, comb_out)
+            out = (1.0 - wet) * out + (wet * 1.2) * wet_sig
+        except Exception:
+            pass
+
+    return np.clip(out, -1.0, 1.0).astype(np.float32)
+
 # ----------------- 4. FASTAPI MICROSERVICE ----------------- #
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -213,6 +313,11 @@ async def synthesize(req: Request):
     blend_weights = data.get("blend_weights")
     speed = float(data.get("speed", 0.90))
     gain = float(data.get("gain", 1.0))
+    pitch_shift = float(data.get("pitch_shift", 0.0))
+    warmth = float(data.get("warmth", 0.0))
+    clarity = float(data.get("clarity", 0.0))
+    reverb = float(data.get("reverb", 0.0))
+    radio_fx = bool(data.get("radio_fx", False))
     lang = data.get("lang", "en-us")
 
     if not text:
@@ -242,6 +347,17 @@ async def synthesize(req: Request):
 
         if gain != 1.0:
             s_arr = s_arr * gain
+
+        # Apply voice audio DSP
+        s_arr = process_audio_fx(
+            s_arr,
+            sr=s_rate,
+            pitch_shift_st=pitch_shift,
+            warmth_db=warmth,
+            clarity_db=clarity,
+            reverb_wet=reverb,
+            radio_fx=radio_fx
+        )
 
         buf = io.BytesIO()
         soundfile.write(buf, s_arr, s_rate, format="WAV")
