@@ -148,12 +148,7 @@
               <span>Trailing Breath Gap</span>
               <span class="control-val" id="val-pause">0.6s</span>
             </div>
-            <input type="range" id="slider-pause" min="0.0" max="3.0" step="0.1" value="0.6">
           </div>
-
-          <button class="action-pill-btn" id="btn-set-default-settings" onclick="handleSetCurrentAsDefault()" style="width: 100%; margin-top: 10px; justify-content: center; font-size: 11.5px; border-radius: 6px; padding: 7px 10px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); color: #93c5fd;" title="Save current speed, volume, pause & tone settings as default for any new sentences">
-            ⭐ Set as Default for New Sentences
-          </button>
         </div>
 
         <!-- Voice Audio Sculpting (Pitch, EQ & Effects) -->
@@ -228,18 +223,35 @@
           </div>
         </div>
 
-        <!-- Bulk Scope Actions -->
-        <div class="inspector-section">
-          <span class="section-label">Bulk Apply & Defaults</span>
+        <!-- Saved Character Voices Section -->
+        <div class="inspector-section" id="inspector-characters-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="section-label">Character Voices</span>
+              <span id="characters-count-badge" class="badge-mini" style="font-size: 10px;">0</span>
+            </div>
+            <button type="button" class="action-pill-btn primary" id="btn-save-as-character" onclick="handleOpenSaveCharacterModal()" style="padding: 4px 8px; font-size: 11px;" title="Save current voice actor and all custom tone & DSP settings as a reusable Character">
+              💾 Save Current
+            </button>
+          </div>
+
+          <div id="saved-characters-list" class="saved-characters-list">
+            <!-- Dynamically populated character cards -->
+          </div>
+        </div>
+
+        <!-- Apply to Selected Sentences Section -->
+        <div class="inspector-section" id="inspector-apply-selected-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span class="section-label">Apply to Selected</span>
+            <span id="apply-selected-count-badge" style="font-size: 11px; color: var(--accent); font-weight: 600;">1 Selected</span>
+          </div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
-            <button class="btn btn-secondary" id="btn-set-default-settings-bulk" onclick="handleSetCurrentAsDefault()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px; background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.4); color: #93c5fd;" title="Save current speed, volume, pause, pitch, EQ & FX filter as default for all new sentences">
-              ⭐ Set as Default for New Sentences
+            <button type="button" class="btn btn-secondary" id="btn-apply-voice-to-selected" onclick="handleApplyVoiceToSelected()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Apply the currently active voice (from last clicked sentence) to selected sentence(s)">
+              🎭 Apply Voice to Selected
             </button>
-            <button class="btn btn-secondary" id="btn-apply-voice-to-all" onclick="handleApplyVoiceToAll()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Set this voice on ALL sentences in your project">
-              🎭 Apply Voice to All Sentences
-            </button>
-            <button class="btn btn-secondary" id="btn-apply-pacing-to-all" onclick="handleApplyPacingToAll()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Set current speed, volume, pause, pitch, EQ and FX filter on ALL sentences">
-              ⚡ Apply Pacing, Pitch, EQ & Filter to All
+            <button type="button" class="btn btn-secondary" id="btn-apply-settings-to-selected" onclick="handleApplySettingsToSelected()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Apply current pacing, pitch, warmth, clarity, reverb and filter (from last clicked sentence) to selected sentence(s)">
+              ⚡ Apply Audio FX & Pacing to Selected
             </button>
           </div>
         </div>
@@ -414,6 +426,7 @@
       <!-- Filter Pills (Clean Wrapped Layout) -->
       <div class="filter-pills-row">
         <button class="filter-pill active" data-filter="all">All Voices</button>
+        <button class="filter-pill" data-filter="characters" id="pill-filter-characters">🎭 My Characters <span id="drawer-characters-badge" class="badge-mini" style="display:none; margin-left: 4px;">0</span></button>
         <button class="filter-pill" data-filter="mystery">🔥 Mystery & Horror</button>
         <button class="filter-pill" data-filter="blends">🎭 Custom Blends</button>
         <button class="filter-pill" data-filter="female">Female</button>
@@ -566,7 +579,53 @@
     </div>
   </div>
 
+  <!-- ================= SAVE CHARACTER MODAL ================= -->
+  <div class="drawer-backdrop" id="save-character-modal">
+    <div class="drawer-window" style="width: 500px; max-width: 95vw;">
+      <div class="drawer-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">🎭</span>
+          <span class="drawer-title" id="save-character-modal-title">Save Character Voice</span>
+        </div>
+        <button class="icon-btn" onclick="closeSaveCharacterModal()" style="font-size: 18px;">✕</button>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px;">Character Name</label>
+          <input type="text" id="char-modal-name-input" class="search-input" placeholder="e.g. Detective Cole, Sarah (Heroine), Demon Lord...">
+        </div>
+
+        <!-- Settings Preview Card -->
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div id="char-modal-avatar-preview" class="voice-avatar-badge" style="background-color: #6366f1; width: 36px; height: 36px; font-size: 13px;">CH</div>
+            <div style="display: flex; flex-direction: column;">
+              <span id="char-modal-voice-name" style="font-weight: 700; font-size: 13.5px; color: #fff;">Voice Name</span>
+              <span id="char-modal-voice-sub" style="font-size: 11px; color: var(--text-muted);">Voice details</span>
+            </div>
+          </div>
+          <div id="char-modal-dsp-summary" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Color Accent Selector -->
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px;">Avatar Color Accent</label>
+          <div class="char-color-palette" id="char-modal-color-palette">
+            <!-- Palette swatches -->
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+          <button type="button" class="btn btn-secondary" onclick="closeSaveCharacterModal()">Cancel</button>
+          <button type="button" class="btn btn-primary" id="btn-save-character-confirm" onclick="confirmSaveCharacter()">💾 Save Character</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=460"></script>
+  <script src="/studio/js/app.js?v=470"></script>
 </body>
 </html>

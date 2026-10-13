@@ -19,7 +19,9 @@ const state = {
   nextSentenceTimer: null,
   config: { remote_worker_url: "", active: false },
   undoStack: [],
-  redoStack: []
+  redoStack: [],
+  savedCharacters: [],
+  selectedCharacterColor: "#6366f1"
 };
 
 // ---------------- UTILITIES & HELPERS ---------------- //
@@ -286,6 +288,7 @@ function renderHistoryDropdownList() {
 
 async function initApp() {
   try {
+    loadSavedCharacters();
     await loadVoices();
     await loadProjectsList();
     await loadConfig();
@@ -607,6 +610,7 @@ function renderStudio() {
 
   renderBlocks();
   renderInspector();
+  renderSavedCharactersList();
   renderTimeline();
   updateSelectionUI();
 }
@@ -1011,6 +1015,21 @@ function updateSelectionUI() {
     btnDelete.textContent = `🗑️ Delete (${count})`;
   }
 
+  // Update Apply to Selected inspector buttons
+  const btnApplyVoice = document.getElementById("btn-apply-voice-to-selected");
+  const btnApplySettings = document.getElementById("btn-apply-settings-to-selected");
+  const applySelectedBadge = document.getElementById("apply-selected-count-badge");
+
+  if (btnApplyVoice) {
+    btnApplyVoice.textContent = count > 1 ? `🎭 Apply Voice to Selected (${count})` : "🎭 Apply Voice to Selected";
+  }
+  if (btnApplySettings) {
+    btnApplySettings.textContent = count > 1 ? `⚡ Apply Audio FX & Pacing to Selected (${count})` : "⚡ Apply Audio FX & Pacing to Selected";
+  }
+  if (applySelectedBadge) {
+    applySelectedBadge.textContent = count > 1 ? `${count} Selected` : "1 Sentence";
+  }
+
   updateDefaultVoiceButtonUI();
 }
 
@@ -1239,20 +1258,39 @@ async function handleMergeShortBlocks() {
   }
 }
 
-function handleApplyVoiceToAll() {
-  if (!state.currentProject || !state.currentProject.blocks) return;
+// ---------------- APPLY TO SELECTED SENTENCES ---------------- //
+
+function handleApplyVoiceToSelected() {
+  if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
   const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
     ? state.activeBlockIndex
     : (state.selectedBlockIndices && state.selectedBlockIndices.size > 0 ? Array.from(state.selectedBlockIndices)[0] : 0);
   const activeBlock = state.currentProject.blocks[activeIdx];
-  if (!activeBlock) return;
+  if (!activeBlock || activeBlock.type === "heading" || activeBlock.is_spoken === false) {
+    showToast("⚠️ Select a spoken sentence block first.");
+    return;
+  }
 
-  recordHistory("Apply Voice to All");
+  const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
+    ? Array.from(state.selectedBlockIndices)
+    : [activeIdx];
+
+  const spokenTargets = targets.filter(idx => {
+    const b = state.currentProject.blocks[idx];
+    return b && b.type !== "heading" && b.is_spoken !== false;
+  });
+
+  if (spokenTargets.length <= 1) {
+    showToast("ℹ️ Use checkboxes or Select All to select multiple sentences to apply this voice to.");
+    return;
+  }
 
   const voice = getVoiceById(activeBlock.voice_id);
-  const total = state.currentProject.blocks.length;
+  recordHistory(`Apply Voice to Selected (${spokenTargets.length})`);
 
-  state.currentProject.blocks.forEach(b => {
+  spokenTargets.forEach(idx => {
+    const b = state.currentProject.blocks[idx];
+    if (!b) return;
     b.voice_id = activeBlock.voice_id;
     if (activeBlock.blend_weights) {
       b.blend_weights = JSON.parse(JSON.stringify(activeBlock.blend_weights));
@@ -1261,35 +1299,66 @@ function handleApplyVoiceToAll() {
     }
     delete b.cachedAudioUrl;
     delete b.cachedSig;
+    delete b.duration;
+
+    const row = document.querySelector(`[data-index="${idx}"]`);
+    if (row) {
+      row.classList.remove("ready");
+      const timeText = row.querySelector(".scrubber-time");
+      if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      const avatar = row.querySelector(".block-avatar");
+      if (avatar) {
+        avatar.style.backgroundColor = voice.color;
+        avatar.textContent = voice.badge || voice.id.slice(0, 2).toUpperCase();
+      }
+    }
   });
 
   renderStudio();
   debouncedSave();
-  showToast(`🎭 Applied voice "${voice.name}" to all ${total} sentences!`);
+  showToast(`🎭 Applied voice "${voice.name}" to ${spokenTargets.length} selected sentences!`);
 }
 
-function handleApplyPacingToAll() {
-  if (!state.currentProject || !state.currentProject.blocks) return;
+function handleApplySettingsToSelected() {
+  if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
   const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
     ? state.activeBlockIndex
     : (state.selectedBlockIndices && state.selectedBlockIndices.size > 0 ? Array.from(state.selectedBlockIndices)[0] : 0);
   const activeBlock = state.currentProject.blocks[activeIdx];
-  if (!activeBlock) return;
+  if (!activeBlock || activeBlock.type === "heading" || activeBlock.is_spoken === false) {
+    showToast("⚠️ Select a spoken sentence block first.");
+    return;
+  }
 
-  recordHistory("Apply Pacing to All");
+  const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
+    ? Array.from(state.selectedBlockIndices)
+    : [activeIdx];
 
-  const gainVal = activeBlock.gain || 1.0;
-  const speedVal = activeBlock.speed || 0.90;
-  const pauseVal = activeBlock.pause_after || 0.6;
+  const spokenTargets = targets.filter(idx => {
+    const b = state.currentProject.blocks[idx];
+    return b && b.type !== "heading" && b.is_spoken !== false;
+  });
+
+  if (spokenTargets.length <= 1) {
+    showToast("ℹ️ Use checkboxes or Select All to select multiple sentences to apply these settings to.");
+    return;
+  }
+
+  recordHistory(`Apply Audio FX & Pacing to Selected (${spokenTargets.length})`);
+
+  const gainVal = activeBlock.gain !== undefined ? activeBlock.gain : 1.0;
+  const speedVal = activeBlock.speed !== undefined ? activeBlock.speed : 0.90;
+  const pauseVal = activeBlock.pause_after !== undefined ? activeBlock.pause_after : 0.6;
   const pitchVal = Number(activeBlock.pitch_shift || 0.0);
   const warmthVal = Number(activeBlock.warmth || 0.0);
   const clarityVal = Number(activeBlock.clarity || 0.0);
   const reverbVal = Number(activeBlock.reverb || 0.0);
   const radioVal = Boolean(activeBlock.radio_fx);
   const filterVal = (activeBlock.fx_filter || (radioVal ? "radio" : "none")).toLowerCase();
-  const total = state.currentProject.blocks.length;
 
-  state.currentProject.blocks.forEach(b => {
+  spokenTargets.forEach(idx => {
+    const b = state.currentProject.blocks[idx];
+    if (!b) return;
     b.gain = gainVal;
     b.speed = speedVal;
     b.pause_after = pauseVal;
@@ -1301,11 +1370,494 @@ function handleApplyPacingToAll() {
     b.fx_filter = filterVal;
     delete b.cachedAudioUrl;
     delete b.cachedSig;
+    delete b.duration;
+
+    const row = document.querySelector(`[data-index="${idx}"]`);
+    if (row) {
+      row.classList.remove("ready");
+      const timeText = row.querySelector(".scrubber-time");
+      if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+    }
   });
 
   renderStudio();
   debouncedSave();
-  showToast(`⚡ Applied pacing, pitch, EQ & filter (${filterVal}) to all ${total} sentences!`);
+  showToast(`⚡ Applied pacing, pitch, EQ & filter to ${spokenTargets.length} selected sentences!`);
+}
+
+function handleApplyVoiceToAll() {
+  handleApplyVoiceToSelected();
+}
+
+function handleApplyPacingToAll() {
+  handleApplySettingsToSelected();
+}
+
+// ---------------- SAVED CHARACTER VOICES LIBRARY ---------------- //
+
+const CHARACTER_COLOR_PALETTE = [
+  "#6366f1", // Indigo
+  "#3b82f6", // Blue
+  "#06b6d4", // Cyan
+  "#10b981", // Emerald
+  "#eab308", // Amber
+  "#f97316", // Orange
+  "#ef4444", // Red
+  "#ec4899", // Pink
+  "#a855f7"  // Purple
+];
+
+function loadSavedCharacters() {
+  try {
+    const raw = localStorage.getItem("kss_saved_characters");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        state.savedCharacters = parsed;
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn("Could not load saved characters from localStorage:", e);
+  }
+
+  state.savedCharacters = [
+    {
+      id: "char_narrator",
+      name: "Narrator (Studio)",
+      voice_id: "blend_fenrir_onyx",
+      speed: 0.90,
+      gain: 1.0,
+      pause_after: 0.6,
+      pitch_shift: 0.0,
+      warmth: 0.0,
+      clarity: 0.0,
+      reverb: 0.0,
+      fx_filter: "none",
+      radio_fx: false,
+      color: "#6366f1",
+      badge: "NA"
+    },
+    {
+      id: "char_hero",
+      name: "Protagonist / Hero",
+      voice_id: "am_adam",
+      speed: 0.94,
+      gain: 1.0,
+      pause_after: 0.7,
+      pitch_shift: 0.5,
+      warmth: 1.0,
+      clarity: 1.5,
+      reverb: 0.0,
+      fx_filter: "none",
+      radio_fx: false,
+      color: "#3b82f6",
+      badge: "HE"
+    },
+    {
+      id: "char_sarah",
+      name: "Sarah (Heroine)",
+      voice_id: "af_sarah",
+      speed: 0.92,
+      gain: 1.0,
+      pause_after: 0.8,
+      pitch_shift: 1.0,
+      warmth: 0.5,
+      clarity: 2.0,
+      reverb: 0.05,
+      fx_filter: "none",
+      radio_fx: false,
+      color: "#ec4899",
+      badge: "SA"
+    },
+    {
+      id: "char_radio",
+      name: "Radio Dispatcher",
+      voice_id: "am_michael",
+      speed: 0.92,
+      gain: 1.0,
+      pause_after: 0.7,
+      pitch_shift: 0.0,
+      warmth: 0.0,
+      clarity: 1.5,
+      reverb: 0.0,
+      fx_filter: "radio",
+      radio_fx: true,
+      color: "#eab308",
+      badge: "RD"
+    }
+  ];
+  saveSavedCharactersToStorage();
+}
+
+function saveSavedCharactersToStorage() {
+  try {
+    localStorage.setItem("kss_saved_characters", JSON.stringify(state.savedCharacters));
+  } catch (e) {
+    console.warn("Could not save characters to localStorage:", e);
+  }
+}
+
+function renderSavedCharactersList() {
+  const container = document.getElementById("saved-characters-list");
+  const countBadge = document.getElementById("characters-count-badge");
+  const drawerBadge = document.getElementById("drawer-characters-badge");
+
+  const total = state.savedCharacters ? state.savedCharacters.length : 0;
+  if (countBadge) countBadge.textContent = total;
+  if (drawerBadge) {
+    drawerBadge.textContent = total;
+    drawerBadge.style.display = total > 0 ? "inline-flex" : "none";
+  }
+
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (total === 0) {
+    container.innerHTML = `
+      <div class="saved-char-empty">
+        No character voices saved yet.<br>
+        <span style="font-size: 11px; opacity: 0.75;">Click "＋ Save Current" to save active voice & settings as a character.</span>
+      </div>
+    `;
+    return;
+  }
+
+  const activeBlock = (state.currentProject?.blocks && typeof state.activeBlockIndex === "number")
+    ? state.currentProject.blocks[state.activeBlockIndex]
+    : null;
+
+  state.savedCharacters.forEach(char => {
+    const card = document.createElement("div");
+    const voiceObj = getVoiceById(char.voice_id);
+    const isMatching = Boolean(
+      activeBlock &&
+      activeBlock.voice_id === char.voice_id &&
+      (activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none")) === char.fx_filter
+    );
+
+    card.className = `saved-char-card ${isMatching ? "active-char" : ""}`;
+    card.dataset.charId = char.id;
+    card.title = `Click to apply ${char.name} to selected sentence(s)`;
+
+    const badgeText = char.badge || char.name.slice(0, 2).toUpperCase();
+    const filterTag = (char.fx_filter && char.fx_filter !== "none")
+      ? `<span class="saved-char-filter-pill">${char.fx_filter.toUpperCase()}</span>`
+      : "";
+
+    const speedStr = `${Number(char.speed || 0.90).toFixed(2)}x`;
+    const pitchStr = char.pitch_shift ? ` • ${(char.pitch_shift > 0 ? '+' : '') + Number(char.pitch_shift).toFixed(1)}st` : "";
+    const filterStr = (char.fx_filter && char.fx_filter !== "none") ? ` • ${char.fx_filter}` : "";
+
+    card.innerHTML = `
+      <div class="saved-char-left">
+        <div class="saved-char-avatar" style="background-color: ${char.color || '#6366f1'}">
+          ${escapeHtml(badgeText)}
+        </div>
+        <div class="saved-char-info">
+          <div class="saved-char-name-row">
+            <span class="saved-char-name">${escapeHtml(char.name)}</span>
+            ${filterTag}
+          </div>
+          <span class="saved-char-details">${escapeHtml(voiceObj.name)} • ${speedStr}${pitchStr}${filterStr}</span>
+        </div>
+      </div>
+      <div class="saved-char-actions">
+        <button type="button" class="saved-char-btn" title="Apply to selected sentence(s)">Apply</button>
+        <button type="button" class="saved-char-icon-btn" title="Update character with current panel settings" data-action="update">🔄</button>
+        <button type="button" class="saved-char-icon-btn" title="Rename character" data-action="rename">✏️</button>
+        <button type="button" class="saved-char-icon-btn danger" title="Delete character" data-action="delete">✕</button>
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      applyCharacterToSelected(char.id);
+    });
+
+    const updateBtn = card.querySelector('[data-action="update"]');
+    if (updateBtn) {
+      updateBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateCharacterWithCurrent(char.id);
+      });
+    }
+
+    const renameBtn = card.querySelector('[data-action="rename"]');
+    if (renameBtn) {
+      renameBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        renameCharacter(char.id);
+      });
+    }
+
+    const deleteBtn = card.querySelector('[data-action="delete"]');
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteCharacter(char.id);
+      });
+    }
+
+    container.appendChild(card);
+  });
+}
+
+function handleOpenSaveCharacterModal() {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : 0;
+  const activeBlock = state.currentProject.blocks[activeIdx];
+  if (!activeBlock || activeBlock.type === "heading" || activeBlock.is_spoken === false) {
+    showToast("⚠️ Select a spoken sentence block first to capture its voice & settings.");
+    return;
+  }
+
+  const voiceObj = getVoiceById(activeBlock.voice_id);
+  const modal = document.getElementById("save-character-modal");
+  const nameInput = document.getElementById("char-modal-name-input");
+  const avatarPreview = document.getElementById("char-modal-avatar-preview");
+  const voiceNameEl = document.getElementById("char-modal-voice-name");
+  const voiceSubEl = document.getElementById("char-modal-voice-sub");
+  const dspSummaryEl = document.getElementById("char-modal-dsp-summary");
+  const paletteEl = document.getElementById("char-modal-color-palette");
+
+  state.selectedCharacterColor = voiceObj.color || "#6366f1";
+
+  const existingCount = (state.savedCharacters?.length || 0) + 1;
+  if (nameInput) {
+    nameInput.value = `Character ${existingCount}`;
+    setTimeout(() => { nameInput.focus(); nameInput.select(); }, 50);
+  }
+
+  if (avatarPreview) {
+    avatarPreview.style.backgroundColor = state.selectedCharacterColor;
+    avatarPreview.textContent = `C${existingCount}`;
+  }
+
+  if (voiceNameEl) voiceNameEl.textContent = voiceObj.name;
+  if (voiceSubEl) voiceSubEl.textContent = voiceObj.timbre ? `${voiceObj.gender.toUpperCase()} • ${voiceObj.timbre}` : voiceObj.gender.toUpperCase();
+
+  if (dspSummaryEl) {
+    dspSummaryEl.innerHTML = "";
+    const speed = activeBlock.speed !== undefined ? Number(activeBlock.speed).toFixed(2) : "0.90";
+    const pitch = Number(activeBlock.pitch_shift || 0);
+    const warmth = Number(activeBlock.warmth || 0);
+    const clarity = Number(activeBlock.clarity || 0);
+    const reverb = Number(activeBlock.reverb || 0);
+    const filter = (activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none")).toLowerCase();
+
+    const pills = [
+      `${speed}x Speed`,
+      `${Math.round((activeBlock.gain || 1.0) * 100)}% Vol`,
+      `${(activeBlock.pause_after || 0.6).toFixed(1)}s Pause`
+    ];
+    if (pitch !== 0) pills.push(`${pitch > 0 ? '+' : ''}${pitch.toFixed(1)}st Pitch`);
+    if (warmth !== 0) pills.push(`Warmth ${warmth > 0 ? '+' : ''}${warmth.toFixed(1)}dB`);
+    if (clarity !== 0) pills.push(`Clarity ${clarity > 0 ? '+' : ''}${clarity.toFixed(1)}dB`);
+    if (reverb > 0) pills.push(`${Math.round(reverb * 100)}% Reverb`);
+    if (filter !== "none") pills.push(`Filter: ${filter.toUpperCase()}`);
+
+    pills.forEach(pText => {
+      const sp = document.createElement("span");
+      sp.className = "char-dsp-pill";
+      sp.textContent = pText;
+      dspSummaryEl.appendChild(sp);
+    });
+  }
+
+  if (paletteEl) {
+    paletteEl.innerHTML = "";
+    CHARACTER_COLOR_PALETTE.forEach(color => {
+      const sw = document.createElement("div");
+      sw.className = `char-color-swatch ${color === state.selectedCharacterColor ? 'active' : ''}`;
+      sw.style.backgroundColor = color;
+      sw.addEventListener("click", () => {
+        state.selectedCharacterColor = color;
+        paletteEl.querySelectorAll(".char-color-swatch").forEach(s => s.classList.remove("active"));
+        sw.classList.add("active");
+        if (avatarPreview) avatarPreview.style.backgroundColor = color;
+      });
+      paletteEl.appendChild(sw);
+    });
+  }
+
+  nameInput?.addEventListener("input", (e) => {
+    const val = e.target.value.trim();
+    if (avatarPreview) {
+      avatarPreview.textContent = val ? val.slice(0, 2).toUpperCase() : `C${existingCount}`;
+    }
+  });
+
+  if (modal) modal.classList.add("active");
+}
+
+function closeSaveCharacterModal() {
+  const modal = document.getElementById("save-character-modal");
+  if (modal) modal.classList.remove("active");
+}
+
+function confirmSaveCharacter() {
+  const nameInput = document.getElementById("char-modal-name-input");
+  const charName = (nameInput?.value || "").trim();
+  if (!charName) {
+    alert("Please enter a character name (e.g. 'Sarah', 'Detective Cole').");
+    return;
+  }
+
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : 0;
+  const activeBlock = state.currentProject.blocks[activeIdx];
+  if (!activeBlock) return;
+
+  const newChar = {
+    id: "char_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
+    name: charName,
+    voice_id: activeBlock.voice_id || state.currentProject.default_voice || "blend_fenrir_onyx",
+    speed: activeBlock.speed !== undefined ? Number(activeBlock.speed) : 0.90,
+    gain: activeBlock.gain !== undefined ? Number(activeBlock.gain) : 1.0,
+    pause_after: activeBlock.pause_after !== undefined ? Number(activeBlock.pause_after) : 0.6,
+    pitch_shift: Number(activeBlock.pitch_shift || 0.0),
+    warmth: Number(activeBlock.warmth || 0.0),
+    clarity: Number(activeBlock.clarity || 0.0),
+    reverb: Number(activeBlock.reverb || 0.0),
+    fx_filter: activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none"),
+    radio_fx: Boolean(activeBlock.radio_fx || activeBlock.fx_filter === "radio"),
+    color: state.selectedCharacterColor || "#6366f1",
+    badge: charName.slice(0, 2).toUpperCase()
+  };
+
+  if (activeBlock.blend_weights) {
+    newChar.blend_weights = JSON.parse(JSON.stringify(activeBlock.blend_weights));
+  }
+
+  if (!state.savedCharacters) state.savedCharacters = [];
+  state.savedCharacters.push(newChar);
+  saveSavedCharactersToStorage();
+  renderSavedCharactersList();
+  closeSaveCharacterModal();
+  showToast(`🎭 Saved Character "${newChar.name}"!`);
+}
+
+function applyCharacterToSelected(charId) {
+  const char = state.savedCharacters.find(c => c.id === charId);
+  if (!char || !state.currentProject || !state.currentProject.blocks) return;
+
+  const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
+    ? Array.from(state.selectedBlockIndices)
+    : [state.activeBlockIndex || 0];
+
+  const spokenTargets = targets.filter(idx => {
+    const b = state.currentProject.blocks[idx];
+    return b && b.type !== "heading" && b.is_spoken !== false;
+  });
+
+  if (spokenTargets.length === 0) {
+    showToast("ℹ️ Selected items contain no spoken sentences.");
+    return;
+  }
+
+  recordHistory(`Apply Character: ${char.name}`);
+
+  spokenTargets.forEach(idx => {
+    const b = state.currentProject.blocks[idx];
+    if (!b) return;
+
+    b.voice_id = char.voice_id;
+    if (char.blend_weights) {
+      b.blend_weights = JSON.parse(JSON.stringify(char.blend_weights));
+    } else {
+      delete b.blend_weights;
+    }
+
+    b.speed = char.speed;
+    b.gain = char.gain;
+    b.pause_after = char.pause_after;
+    b.pitch_shift = char.pitch_shift;
+    b.warmth = char.warmth;
+    b.clarity = char.clarity;
+    b.reverb = char.reverb;
+    b.fx_filter = char.fx_filter || (char.radio_fx ? "radio" : "none");
+    b.radio_fx = Boolean(char.radio_fx || char.fx_filter === "radio");
+
+    delete b.cachedAudioUrl;
+    delete b.cachedSig;
+    delete b.duration;
+
+    const row = document.querySelector(`[data-index="${idx}"]`);
+    if (row) {
+      row.classList.remove("ready", "playing");
+      const timeText = row.querySelector(".scrubber-time");
+      if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      const avatar = row.querySelector(".block-avatar");
+      if (avatar) {
+        avatar.style.backgroundColor = char.color || getVoiceById(char.voice_id).color;
+        avatar.textContent = char.badge || char.name.slice(0, 2).toUpperCase();
+      }
+    }
+  });
+
+  renderStudio();
+  debouncedSave();
+  showToast(`🎭 Applied Character "${char.name}" to ${spokenTargets.length} sentence${spokenTargets.length > 1 ? 's' : ''}!`);
+}
+
+function updateCharacterWithCurrent(charId) {
+  const char = state.savedCharacters.find(c => c.id === charId);
+  if (!char || !state.currentProject || !state.currentProject.blocks) return;
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : 0;
+  const activeBlock = state.currentProject.blocks[activeIdx];
+  if (!activeBlock || activeBlock.type === "heading" || activeBlock.is_spoken === false) {
+    showToast("⚠️ Select a spoken sentence block first.");
+    return;
+  }
+
+  char.voice_id = activeBlock.voice_id || char.voice_id;
+  if (activeBlock.blend_weights) {
+    char.blend_weights = JSON.parse(JSON.stringify(activeBlock.blend_weights));
+  } else {
+    delete char.blend_weights;
+  }
+  char.speed = activeBlock.speed !== undefined ? Number(activeBlock.speed) : char.speed;
+  char.gain = activeBlock.gain !== undefined ? Number(activeBlock.gain) : char.gain;
+  char.pause_after = activeBlock.pause_after !== undefined ? Number(activeBlock.pause_after) : char.pause_after;
+  char.pitch_shift = Number(activeBlock.pitch_shift || 0.0);
+  char.warmth = Number(activeBlock.warmth || 0.0);
+  char.clarity = Number(activeBlock.clarity || 0.0);
+  char.reverb = Number(activeBlock.reverb || 0.0);
+  char.fx_filter = activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none");
+  char.radio_fx = Boolean(activeBlock.radio_fx || activeBlock.fx_filter === "radio");
+
+  saveSavedCharactersToStorage();
+  renderSavedCharactersList();
+  showToast(`✓ Updated Character "${char.name}" with current panel settings!`);
+}
+
+function renameCharacter(charId) {
+  const char = state.savedCharacters.find(c => c.id === charId);
+  if (!char) return;
+  const newName = prompt(`Enter new name for character "${char.name}":`, char.name);
+  if (newName && newName.trim() && newName.trim() !== char.name) {
+    char.name = newName.trim();
+    char.badge = char.name.slice(0, 2).toUpperCase();
+    saveSavedCharactersToStorage();
+    renderSavedCharactersList();
+    showToast(`✓ Renamed to "${char.name}"`);
+  }
+}
+
+function deleteCharacter(charId) {
+  const char = state.savedCharacters.find(c => c.id === charId);
+  if (!char) return;
+  if (confirm(`Delete character "${char.name}"?`)) {
+    state.savedCharacters = state.savedCharacters.filter(c => c.id !== charId);
+    saveSavedCharactersToStorage();
+    renderSavedCharactersList();
+    showToast(`🗑️ Deleted character "${char.name}".`);
+  }
 }
 
 function getProjectDefaultSettings() {
@@ -2671,6 +3223,63 @@ function renderVoiceList() {
   const filter = state.activeFilter;
   const sort = state.activeSort;
 
+  // Characters tab in Voice Drawer
+  if (filter === "characters") {
+    const charList = (state.savedCharacters || []).filter(c => {
+      if (!query) return true;
+      const v = getVoiceById(c.voice_id);
+      return c.name.toLowerCase().includes(query) || v.name.toLowerCase().includes(query);
+    });
+
+    if (charList.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: var(--text-subtle); padding: 40px;">
+          No saved characters match your search.<br>
+          <span style="font-size: 12px; opacity: 0.8; margin-top: 8px; display: inline-block;">
+            Click "＋ Save Current" in the inspector to save your custom character voices!
+          </span>
+        </div>
+      `;
+      return;
+    }
+
+    charList.forEach(char => {
+      const v = getVoiceById(char.voice_id);
+      const card = document.createElement("div");
+      card.className = "voice-card";
+      const speedStr = `${Number(char.speed || 0.90).toFixed(2)}x`;
+      const pitchStr = char.pitch_shift ? ` • ${(char.pitch_shift > 0 ? '+' : '') + Number(char.pitch_shift).toFixed(1)}st` : "";
+      const filterStr = (char.fx_filter && char.fx_filter !== "none") ? ` • ${char.fx_filter.toUpperCase()}` : "";
+
+      card.innerHTML = `
+        <div class="voice-card-left">
+          <div class="voice-avatar-badge" style="background-color: ${char.color || v.color}">
+            ${escapeHtml(char.badge || char.name.slice(0, 2).toUpperCase())}
+          </div>
+          <div class="voice-info">
+            <div class="voice-name">🎭 ${escapeHtml(char.name)}</div>
+            <div class="voice-sub">${escapeHtml(v.name)} • ${speedStr}${pitchStr}${filterStr}</div>
+            <div class="voice-tags-row">
+              <span class="voice-tag" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc;">Character Preset</span>
+              ${char.fx_filter && char.fx_filter !== 'none' ? `<span class="voice-tag" style="background: rgba(234, 88, 12, 0.2); color: #fb923c;">${char.fx_filter.toUpperCase()}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary assign-voice-btn">Apply Character</button>
+        </div>
+      `;
+
+      card.querySelector(".assign-voice-btn").addEventListener("click", () => {
+        applyCharacterToSelected(char.id);
+        closeVoiceDrawer();
+      });
+
+      container.appendChild(card);
+    });
+    return;
+  }
+
   // 1. Filter
   let list = state.voices.filter(v => {
     const matchQuery = !query || 
@@ -3619,6 +4228,20 @@ function setupEventListeners() {
     });
   }
 
+  const saveCharModal = document.getElementById("save-character-modal");
+  if (saveCharModal) {
+    saveCharModal.addEventListener("click", (e) => {
+      if (e.target.id === "save-character-modal") closeSaveCharacterModal();
+    });
+  }
+
+  document.getElementById("char-modal-name-input")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      confirmSaveCharacter();
+    }
+  });
+
   // Drag and drop for new project textarea
   const newProjTextarea = document.getElementById("new-project-text-input");
   if (newProjTextarea) {
@@ -4029,4 +4652,15 @@ window.addNewSceneHeading = addNewSceneHeading;
 window.insertHeadingAfter = insertHeadingAfter;
 window.convertHeadingToSpeech = convertHeadingToSpeech;
 window.convertSpeechToHeading = convertSpeechToHeading;
+window.handleApplyVoiceToSelected = handleApplyVoiceToSelected;
+window.handleApplySettingsToSelected = handleApplySettingsToSelected;
+window.handleOpenSaveCharacterModal = handleOpenSaveCharacterModal;
+window.closeSaveCharacterModal = closeSaveCharacterModal;
+window.confirmSaveCharacter = confirmSaveCharacter;
+window.applyCharacterToSelected = applyCharacterToSelected;
+window.updateCharacterWithCurrent = updateCharacterWithCurrent;
+window.renameCharacter = renameCharacter;
+window.deleteCharacter = deleteCharacter;
+window.renderSavedCharactersList = renderSavedCharactersList;
+
 
