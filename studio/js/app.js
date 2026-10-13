@@ -713,6 +713,14 @@ function handleMakeDefaultVoice() {
   const voiceObj = getVoiceById(newVoiceId);
 
   state.currentProject.default_voice = newVoiceId;
+  if (state.currentProject.default_settings) {
+    state.currentProject.default_settings.voice_id = newVoiceId;
+    if (newBlendWeights) {
+      state.currentProject.default_settings.blend_weights = JSON.parse(JSON.stringify(newBlendWeights));
+    } else {
+      delete state.currentProject.default_settings.blend_weights;
+    }
+  }
 
   let updatedCount = 0;
   state.currentProject.blocks.forEach(b => {
@@ -739,14 +747,23 @@ function handleBulkDelete() {
 
   const remaining = state.currentProject.blocks.filter((_, idx) => !state.selectedBlockIndices.has(idx));
   if (remaining.length === 0) {
-    state.currentProject.blocks = [{
+    const defs = getProjectDefaultSettings();
+    const newB = {
       id: "b_1",
       text: "Type sentence here...",
-      voice_id: state.currentProject.default_voice || "blend_fenrir_onyx",
-      speed: 0.90,
-      gain: 1.0,
-      pause_after: 0.6
-    }];
+      voice_id: defs.voice_id,
+      speed: defs.speed,
+      gain: defs.gain,
+      pause_after: defs.pause_after,
+      pitch_shift: defs.pitch_shift,
+      warmth: defs.warmth,
+      clarity: defs.clarity,
+      reverb: defs.reverb,
+      radio_fx: (defs.fx_filter === "radio" || Boolean(defs.radio_fx)),
+      fx_filter: defs.fx_filter
+    };
+    if (defs.blend_weights) newB.blend_weights = JSON.parse(JSON.stringify(defs.blend_weights));
+    state.currentProject.blocks = [newB];
   } else {
     state.currentProject.blocks = remaining;
   }
@@ -917,6 +934,97 @@ function handleApplyPacingToAll() {
   showToast(`⚡ Applied pacing, pitch, EQ & filter (${filterVal}) to all ${total} sentences!`);
 }
 
+function getProjectDefaultSettings() {
+  let savedLocal = null;
+  try {
+    const raw = localStorage.getItem("kss_default_sentence_settings");
+    if (raw) savedLocal = JSON.parse(raw);
+  } catch (e) {}
+
+  const p = state.currentProject || {};
+  const projDefs = p.default_settings || {};
+
+  return {
+    voice_id: projDefs.voice_id || p.default_voice || savedLocal?.voice_id || "blend_fenrir_onyx",
+    speed: projDefs.speed !== undefined ? Number(projDefs.speed) : (p.default_speed !== undefined ? Number(p.default_speed) : (savedLocal?.speed !== undefined ? Number(savedLocal.speed) : 0.90)),
+    gain: projDefs.gain !== undefined ? Number(projDefs.gain) : (p.default_gain !== undefined ? Number(p.default_gain) : (savedLocal?.gain !== undefined ? Number(savedLocal.gain) : 1.0)),
+    pause_after: projDefs.pause_after !== undefined ? Number(projDefs.pause_after) : (p.default_pause !== undefined ? Number(p.default_pause) : (savedLocal?.pause_after !== undefined ? Number(savedLocal.pause_after) : 0.6)),
+    pitch_shift: projDefs.pitch_shift !== undefined ? Number(projDefs.pitch_shift) : (p.default_pitch !== undefined ? Number(p.default_pitch) : (savedLocal?.pitch_shift !== undefined ? Number(savedLocal.pitch_shift) : 0.0)),
+    warmth: projDefs.warmth !== undefined ? Number(projDefs.warmth) : (p.default_warmth !== undefined ? Number(p.default_warmth) : (savedLocal?.warmth !== undefined ? Number(savedLocal.warmth) : 0.0)),
+    clarity: projDefs.clarity !== undefined ? Number(projDefs.clarity) : (p.default_clarity !== undefined ? Number(p.default_clarity) : (savedLocal?.clarity !== undefined ? Number(savedLocal.clarity) : 0.0)),
+    reverb: projDefs.reverb !== undefined ? Number(projDefs.reverb) : (p.default_reverb !== undefined ? Number(p.default_reverb) : (savedLocal?.reverb !== undefined ? Number(savedLocal.reverb) : 0.0)),
+    fx_filter: (projDefs.fx_filter || p.default_filter || savedLocal?.fx_filter || "none").toLowerCase(),
+    radio_fx: projDefs.radio_fx !== undefined ? Boolean(projDefs.radio_fx) : (savedLocal?.radio_fx !== undefined ? Boolean(savedLocal.radio_fx) : false),
+    blend_weights: projDefs.blend_weights || savedLocal?.blend_weights || undefined
+  };
+}
+
+function handleSetCurrentAsDefault() {
+  if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : (state.selectedBlockIndices && state.selectedBlockIndices.size > 0 ? Array.from(state.selectedBlockIndices)[0] : 0);
+  const activeBlock = state.currentProject.blocks[activeIdx];
+  if (!activeBlock) return;
+
+  const currentFilter = (activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none")).toLowerCase();
+  const currentDefaults = {
+    speed: activeBlock.speed !== undefined ? Number(activeBlock.speed) : 0.90,
+    gain: activeBlock.gain !== undefined ? Number(activeBlock.gain) : 1.0,
+    pause_after: activeBlock.pause_after !== undefined ? Number(activeBlock.pause_after) : 0.6,
+    pitch_shift: Number(activeBlock.pitch_shift || 0.0),
+    warmth: Number(activeBlock.warmth || 0.0),
+    clarity: Number(activeBlock.clarity || 0.0),
+    reverb: Number(activeBlock.reverb || 0.0),
+    radio_fx: (currentFilter === "radio"),
+    fx_filter: currentFilter,
+    voice_id: activeBlock.voice_id || state.currentProject.default_voice || "blend_fenrir_onyx",
+    blend_weights: activeBlock.blend_weights ? JSON.parse(JSON.stringify(activeBlock.blend_weights)) : undefined
+  };
+
+  // 1. Store on state.currentProject
+  state.currentProject.default_settings = currentDefaults;
+  state.currentProject.default_voice = currentDefaults.voice_id;
+  state.currentProject.default_speed = currentDefaults.speed;
+  state.currentProject.default_gain = currentDefaults.gain;
+  state.currentProject.default_pause = currentDefaults.pause_after;
+  state.currentProject.default_pitch = currentDefaults.pitch_shift;
+  state.currentProject.default_warmth = currentDefaults.warmth;
+  state.currentProject.default_clarity = currentDefaults.clarity;
+  state.currentProject.default_reverb = currentDefaults.reverb;
+  state.currentProject.default_filter = currentDefaults.fx_filter;
+
+  // 2. Persist in localStorage across projects
+  try {
+    localStorage.setItem("kss_default_sentence_settings", JSON.stringify(currentDefaults));
+  } catch (e) {
+    console.warn("Could not save defaults to localStorage:", e);
+  }
+
+  // 3. Save to server
+  debouncedSave();
+
+  // 4. Temporary button feedback
+  const btn1 = document.getElementById("btn-set-default-settings");
+  const btn2 = document.getElementById("btn-set-default-settings-bulk");
+  [btn1, btn2].forEach(btn => {
+    if (btn) {
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = `✓ Defaults Saved!`;
+      btn.style.borderColor = "var(--primary)";
+      setTimeout(() => {
+        btn.innerHTML = origHtml;
+        btn.style.borderColor = "";
+      }, 1800);
+    }
+  });
+
+  // 5. Toast notification
+  const voiceObj = getVoiceById(currentDefaults.voice_id);
+  const filterLabel = currentDefaults.fx_filter === "none" ? "Clean Studio" : currentDefaults.fx_filter.toUpperCase();
+  showToast(`⭐ Defaults saved! New sentences will use: ${currentDefaults.speed.toFixed(2)}x speed, ${Math.round(currentDefaults.gain * 100)}% vol, ${currentDefaults.pause_after.toFixed(1)}s pause, voice: "${voiceObj.name}", filter: ${filterLabel}.`);
+}
+
 function handleSelectAudioFilter(filterName) {
   if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
   const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
@@ -988,7 +1096,8 @@ async function handleAutoDirectStory() {
       body: JSON.stringify({
         blocks: state.currentProject.blocks,
         default_voice: state.currentProject.default_voice || "blend_fenrir_onyx",
-        expand_dialogue: true
+        expand_dialogue: true,
+        defaults: getProjectDefaultSettings()
       })
     });
 
@@ -1054,21 +1163,24 @@ function applyDeliveryPreset(presetKey) {
   };
 
   switch (presetKey) {
-    case "narrator":
+    case "narrator": {
+      const defs = getProjectDefaultSettings();
       presetConfig = {
         name: "Narrator",
-        voice_id: null,
-        speed: 0.90,
-        gain: 1.0,
-        pause_after: 0.6,
-        pitch_shift: 0.0,
-        warmth: 0.0,
-        clarity: 0.0,
-        reverb: 0.0,
-        radio_fx: false,
+        voice_id: defs.voice_id,
+        speed: defs.speed,
+        gain: defs.gain,
+        pause_after: defs.pause_after,
+        pitch_shift: defs.pitch_shift,
+        warmth: defs.warmth,
+        clarity: defs.clarity,
+        reverb: defs.reverb,
+        radio_fx: (defs.fx_filter === "radio" || Boolean(defs.radio_fx)),
+        fx_filter: defs.fx_filter,
         clearBlend: false
       };
       break;
+    }
     case "whisper":
       presetConfig = {
         name: "Soft Whisper",
@@ -2409,11 +2521,12 @@ async function handleCreateProjectSubmit() {
   const text = (document.getElementById("new-project-text-input")?.value || "").trim();
   const defaultVoice = document.getElementById("new-project-voice-select")?.value || "blend_fenrir_onyx";
 
+  const defs = getProjectDefaultSettings();
   try {
     const res = await fetch("/api/projects/new", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, text, default_voice: defaultVoice })
+      body: JSON.stringify({ title, text, default_voice: defaultVoice, defaults: defs })
     });
 
     const newProj = await res.json();
@@ -2454,11 +2567,12 @@ async function handleDoImport() {
     return;
   }
   const defaultVoice = document.getElementById("import-voice-select")?.value || state.currentProject?.default_voice || "blend_fenrir_onyx";
+  const defs = getProjectDefaultSettings();
   try {
     const res = await fetch("/api/split_text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, default_voice: defaultVoice })
+      body: JSON.stringify({ text, default_voice: defaultVoice, defaults: defs })
     });
     const blocks = await res.json();
     if (!state.currentProject) {
@@ -2730,16 +2844,26 @@ function setupEventListeners() {
   // Add Block button
   document.getElementById("btn-add-block")?.addEventListener("click", () => {
     if (!state.currentProject) return;
-    const defVoice = state.currentProject.default_voice || "blend_fenrir_onyx";
+    const defs = getProjectDefaultSettings();
     const newIdx = state.currentProject.blocks.length;
-    state.currentProject.blocks.push({
-      id: "b_" + (newIdx + 1),
+    const newBlock = {
+      id: "b_" + (newIdx + 1) + "_" + Date.now().toString().slice(-4),
       text: "New sentence...",
-      voice_id: defVoice,
-      speed: 0.90,
-      gain: 1.0,
-      pause_after: 0.6
-    });
+      voice_id: defs.voice_id,
+      speed: defs.speed,
+      gain: defs.gain,
+      pause_after: defs.pause_after,
+      pitch_shift: defs.pitch_shift,
+      warmth: defs.warmth,
+      clarity: defs.clarity,
+      reverb: defs.reverb,
+      radio_fx: (defs.fx_filter === "radio" || Boolean(defs.radio_fx)),
+      fx_filter: defs.fx_filter
+    };
+    if (defs.blend_weights) {
+      newBlock.blend_weights = JSON.parse(JSON.stringify(defs.blend_weights));
+    }
+    state.currentProject.blocks.push(newBlock);
     renderStudio();
     selectBlock(newIdx, "single");
     debouncedSave();
@@ -3050,11 +3174,17 @@ function splitBlock(idx) {
     return;
   }
 
-  const baseVoice = block.voice_id || state.currentProject.default_voice || "blend_fenrir_onyx";
-  const baseSpeed = block.speed || 0.90;
-  const baseGain = block.gain || 1.0;
-  const basePause = block.pause_after || 0.6;
-  const baseBlend = block.blend_weights ? JSON.parse(JSON.stringify(block.blend_weights)) : undefined;
+  const defs = getProjectDefaultSettings();
+  const baseVoice = block.voice_id || defs.voice_id;
+  const baseSpeed = block.speed !== undefined ? block.speed : defs.speed;
+  const baseGain = block.gain !== undefined ? block.gain : defs.gain;
+  const basePause = block.pause_after !== undefined ? block.pause_after : defs.pause_after;
+  const basePitch = block.pitch_shift !== undefined ? block.pitch_shift : defs.pitch_shift;
+  const baseWarmth = block.warmth !== undefined ? block.warmth : defs.warmth;
+  const baseClarity = block.clarity !== undefined ? block.clarity : defs.clarity;
+  const baseReverb = block.reverb !== undefined ? block.reverb : defs.reverb;
+  const baseFilter = block.fx_filter || (block.radio_fx ? "radio" : defs.fx_filter);
+  const baseBlend = block.blend_weights ? JSON.parse(JSON.stringify(block.blend_weights)) : (defs.blend_weights ? JSON.parse(JSON.stringify(defs.blend_weights)) : undefined);
 
   const newBlocks = sentences.map((sent, sIdx) => {
     const newB = {
@@ -3063,7 +3193,13 @@ function splitBlock(idx) {
       voice_id: baseVoice,
       speed: baseSpeed,
       gain: baseGain,
-      pause_after: basePause
+      pause_after: basePause,
+      pitch_shift: basePitch,
+      warmth: baseWarmth,
+      clarity: baseClarity,
+      reverb: baseReverb,
+      radio_fx: (baseFilter === "radio"),
+      fx_filter: baseFilter
     };
     if (baseBlend) newB.blend_weights = JSON.parse(JSON.stringify(baseBlend));
     return newB;
@@ -3081,6 +3217,7 @@ function splitBlock(idx) {
 function handleAutoSplitAll() {
   if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
 
+  const defs = getProjectDefaultSettings();
   let totalSplits = 0;
   const newBlocksList = [];
 
@@ -3088,11 +3225,16 @@ function handleAutoSplitAll() {
     const sentences = splitTextIntoSentences(block.text || "");
     if (sentences.length > 1) {
       totalSplits += (sentences.length - 1);
-      const baseVoice = block.voice_id || state.currentProject.default_voice || "blend_fenrir_onyx";
-      const baseSpeed = block.speed || 0.90;
-      const baseGain = block.gain || 1.0;
-      const basePause = block.pause_after || 0.6;
-      const baseBlend = block.blend_weights ? JSON.parse(JSON.stringify(block.blend_weights)) : undefined;
+      const baseVoice = block.voice_id || defs.voice_id;
+      const baseSpeed = block.speed !== undefined ? block.speed : defs.speed;
+      const baseGain = block.gain !== undefined ? block.gain : defs.gain;
+      const basePause = block.pause_after !== undefined ? block.pause_after : defs.pause_after;
+      const basePitch = block.pitch_shift !== undefined ? block.pitch_shift : defs.pitch_shift;
+      const baseWarmth = block.warmth !== undefined ? block.warmth : defs.warmth;
+      const baseClarity = block.clarity !== undefined ? block.clarity : defs.clarity;
+      const baseReverb = block.reverb !== undefined ? block.reverb : defs.reverb;
+      const baseFilter = block.fx_filter || (block.radio_fx ? "radio" : defs.fx_filter);
+      const baseBlend = block.blend_weights ? JSON.parse(JSON.stringify(block.blend_weights)) : (defs.blend_weights ? JSON.parse(JSON.stringify(defs.blend_weights)) : undefined);
 
       sentences.forEach((sent, sIdx) => {
         const nb = {
@@ -3101,7 +3243,13 @@ function handleAutoSplitAll() {
           voice_id: baseVoice,
           speed: baseSpeed,
           gain: baseGain,
-          pause_after: basePause
+          pause_after: basePause,
+          pitch_shift: basePitch,
+          warmth: baseWarmth,
+          clarity: baseClarity,
+          reverb: baseReverb,
+          radio_fx: (baseFilter === "radio"),
+          fx_filter: baseFilter
         };
         if (baseBlend) nb.blend_weights = JSON.parse(JSON.stringify(baseBlend));
         newBlocksList.push(nb);
@@ -3155,6 +3303,8 @@ window.handleBulkDelete = handleBulkDelete;
 window.handleMakeDefaultVoice = handleMakeDefaultVoice;
 window.handleApplyVoiceToAll = handleApplyVoiceToAll;
 window.handleApplyPacingToAll = handleApplyPacingToAll;
+window.handleSetCurrentAsDefault = handleSetCurrentAsDefault;
+window.getProjectDefaultSettings = getProjectDefaultSettings;
 window.handleToggleRadioFx = handleToggleRadioFx;
 window.handleSelectAudioFilter = handleSelectAudioFilter;
 window.splitBlock = splitBlock;

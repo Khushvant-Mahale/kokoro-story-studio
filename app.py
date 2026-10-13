@@ -187,7 +187,9 @@ async def handle_create_project(request):
     data = await request.json()
     title = data.get("title", "Untitled Project").strip() or "Untitled Project"
     raw_text = data.get("text", "").strip()
-    default_voice = data.get("default_voice", "blend_fenrir_onyx").strip() or "blend_fenrir_onyx"
+    defaults = data.get("defaults") or data.get("default_settings") or {}
+    default_voice = data.get("default_voice") or defaults.get("voice_id", "blend_fenrir_onyx")
+    default_voice = default_voice.strip() if isinstance(default_voice, str) else "blend_fenrir_onyx"
     
     # Generate ID
     import uuid
@@ -197,21 +199,41 @@ async def handle_create_project(request):
     if "blocks" in data and isinstance(data["blocks"], list) and len(data["blocks"]) > 0:
         blocks = data["blocks"]
     elif raw_text:
-        blocks = project_mgr.split_text_into_blocks(raw_text, default_voice=default_voice)
+        blocks = project_mgr.split_text_into_blocks(raw_text, default_voice=default_voice, defaults=defaults)
     else:
-        blocks = [{
+        def_speed = float(defaults.get("speed", 0.90)) if defaults and "speed" in defaults else 0.90
+        def_gain = float(defaults.get("gain", 1.0)) if defaults and "gain" in defaults else 1.0
+        def_pause = float(defaults.get("pause_after", 0.6)) if defaults and "pause_after" in defaults else 0.6
+        def_pitch = float(defaults.get("pitch_shift", 0.0)) if defaults and "pitch_shift" in defaults else 0.0
+        def_warmth = float(defaults.get("warmth", 0.0)) if defaults and "warmth" in defaults else 0.0
+        def_clarity = float(defaults.get("clarity", 0.0)) if defaults and "clarity" in defaults else 0.0
+        def_reverb = float(defaults.get("reverb", 0.0)) if defaults and "reverb" in defaults else 0.0
+        def_filter = str(defaults.get("fx_filter", "none")) if defaults and "fx_filter" in defaults else "none"
+        def_radio = bool(defaults.get("radio_fx", False)) if defaults and "radio_fx" in defaults else (def_filter == "radio")
+        
+        b1 = {
             "id": "b_1",
             "text": "Start typing your first story sentence here...",
             "voice_id": default_voice,
-            "speed": 0.90,
-            "gain": 1.0,
-            "pause_after": 0.6
-        }]
+            "speed": round(def_speed, 2),
+            "gain": round(def_gain, 2),
+            "pause_after": round(def_pause, 1),
+            "pitch_shift": round(def_pitch, 1),
+            "warmth": round(def_warmth, 1),
+            "clarity": round(def_clarity, 1),
+            "reverb": round(def_reverb, 2),
+            "fx_filter": def_filter,
+            "radio_fx": def_radio
+        }
+        if defaults and defaults.get("blend_weights"):
+            b1["blend_weights"] = defaults["blend_weights"]
+        blocks = [b1]
     
     proj_data = {
         "id": proj_id,
         "title": title,
         "default_voice": default_voice,
+        "default_settings": defaults if defaults else None,
         "blocks": blocks,
         "master_filename": f"{proj_id}_master.wav"
     }
@@ -241,17 +263,21 @@ async def handle_save_project(request):
 async def handle_split_text(request):
     data = await request.json()
     text = data.get("text", "")
-    default_voice = data.get("default_voice", "blend_fenrir_onyx").strip() or "blend_fenrir_onyx"
-    blocks = project_mgr.split_text_into_blocks(text, default_voice=default_voice)
+    defaults = data.get("defaults") or data.get("default_settings") or {}
+    default_voice = data.get("default_voice") or defaults.get("voice_id", "blend_fenrir_onyx")
+    default_voice = default_voice.strip() if isinstance(default_voice, str) else "blend_fenrir_onyx"
+    blocks = project_mgr.split_text_into_blocks(text, default_voice=default_voice, defaults=defaults)
     return web.json_response(blocks)
 
 
 async def handle_auto_direct(request):
     data = await request.json()
     blocks = data.get("blocks", [])
-    default_voice = data.get("default_voice", "blend_fenrir_onyx").strip() or "blend_fenrir_onyx"
+    defaults = data.get("defaults") or data.get("default_settings") or {}
+    default_voice = data.get("default_voice") or defaults.get("voice_id", "blend_fenrir_onyx")
+    default_voice = default_voice.strip() if isinstance(default_voice, str) else "blend_fenrir_onyx"
     expand_dialogue = bool(data.get("expand_dialogue", False))
-    directed = project_mgr.auto_direct_blocks(blocks, default_voice=default_voice, expand_dialogue=expand_dialogue)
+    directed = project_mgr.auto_direct_blocks(blocks, default_voice=default_voice, expand_dialogue=expand_dialogue, defaults=defaults)
     return web.json_response(directed)
 
 

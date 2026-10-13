@@ -43,7 +43,7 @@ class ProjectManager:
         safe_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", project_id) or "default"
         return PROJECTS_DIR / f"{safe_id}.json"
 
-    def auto_direct_blocks(self, blocks: List[Dict], default_voice: str = "blend_fenrir_onyx", expand_dialogue: bool = True) -> List[Dict]:
+    def auto_direct_blocks(self, blocks: List[Dict], default_voice: str = "blend_fenrir_onyx", expand_dialogue: bool = True, defaults: Optional[Dict] = None) -> List[Dict]:
         """
         Dynamically directs speech and character casting across blocks.
         Detects quotes, dialogue tags, whispers, screams/exaggerations, and pacing gaps.
@@ -54,6 +54,16 @@ class ProjectManager:
         preset_blends = self._get_preset_blends()
         default_is_blend = default_voice in preset_blends
         default_blend_weights = preset_blends.get(default_voice) if default_is_blend else None
+
+        def_speed = float(defaults.get("speed", 0.90)) if defaults and "speed" in defaults else 0.90
+        def_gain = float(defaults.get("gain", 1.0)) if defaults and "gain" in defaults else 1.0
+        def_pause = float(defaults.get("pause_after", 0.6)) if defaults and "pause_after" in defaults else 0.6
+        def_pitch = float(defaults.get("pitch_shift", 0.0)) if defaults and "pitch_shift" in defaults else 0.0
+        def_warmth = float(defaults.get("warmth", 0.0)) if defaults and "warmth" in defaults else 0.0
+        def_clarity = float(defaults.get("clarity", 0.0)) if defaults and "clarity" in defaults else 0.0
+        def_reverb = float(defaults.get("reverb", 0.0)) if defaults and "reverb" in defaults else 0.0
+        def_filter = str(defaults.get("fx_filter", "none")) if defaults and "fx_filter" in defaults else "none"
+        def_radio = bool(defaults.get("radio_fx", False)) if defaults and "radio_fx" in defaults else (def_filter == "radio")
 
         # Step 1: Optionally expand blocks that contain both dialogue tags and speech
         expanded_blocks = []
@@ -219,10 +229,10 @@ class ProjectManager:
                     pause = 0.7
                 else:
                     voice_id = default_voice
-                    blend_weights = default_blend_weights if default_is_blend else None
-                    speed = 0.90
-                    gain = 1.0
-                    pause = 0.6
+                    blend_weights = (defaults.get("blend_weights") if (defaults and defaults.get("blend_weights")) else (default_blend_weights if default_is_blend else None))
+                    speed = def_speed
+                    gain = def_gain
+                    pause = def_pause
 
             block_data = {
                 "id": item["id"],
@@ -230,7 +240,13 @@ class ProjectManager:
                 "voice_id": voice_id,
                 "speed": round(speed, 2),
                 "gain": round(gain, 2),
-                "pause_after": round(pause, 1)
+                "pause_after": round(pause, 1),
+                "pitch_shift": round(float(orig.get("pitch_shift", def_pitch)), 1) if orig else round(def_pitch, 1),
+                "warmth": round(float(orig.get("warmth", def_warmth)), 1) if orig else round(def_warmth, 1),
+                "clarity": round(float(orig.get("clarity", def_clarity)), 1) if orig else round(def_clarity, 1),
+                "reverb": round(float(orig.get("reverb", def_reverb)), 2) if orig else round(def_reverb, 2),
+                "fx_filter": str(orig.get("fx_filter", def_filter)) if orig else def_filter,
+                "radio_fx": bool(orig.get("radio_fx", def_radio)) if orig else def_radio
             }
             if blend_weights:
                 block_data["blend_weights"] = blend_weights
@@ -251,7 +267,7 @@ class ProjectManager:
 
         return directed_blocks
 
-    def split_text_into_blocks(self, raw_text: str, default_voice: str = "blend_fenrir_onyx") -> List[Dict]:
+    def split_text_into_blocks(self, raw_text: str, default_voice: str = "blend_fenrir_onyx", defaults: Optional[Dict] = None) -> List[Dict]:
         """Splits raw story text into structured sentence blocks and dynamically directs them."""
         lines = [l.strip() for l in raw_text.replace("\r\n", "\n").split("\n") if l.strip()]
         quote_pattern = re.compile(r'([\"“][^\"”]+[\"”])')
@@ -277,18 +293,37 @@ class ProjectManager:
                 sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', line) if s.strip()]
                 candidate_sentences.extend(sents if sents else [line])
 
+        def_speed = float(defaults.get("speed", 0.90)) if defaults and "speed" in defaults else 0.90
+        def_gain = float(defaults.get("gain", 1.0)) if defaults and "gain" in defaults else 1.0
+        def_pause = float(defaults.get("pause_after", 0.6)) if defaults and "pause_after" in defaults else 0.6
+        def_pitch = float(defaults.get("pitch_shift", 0.0)) if defaults and "pitch_shift" in defaults else 0.0
+        def_warmth = float(defaults.get("warmth", 0.0)) if defaults and "warmth" in defaults else 0.0
+        def_clarity = float(defaults.get("clarity", 0.0)) if defaults and "clarity" in defaults else 0.0
+        def_reverb = float(defaults.get("reverb", 0.0)) if defaults and "reverb" in defaults else 0.0
+        def_filter = str(defaults.get("fx_filter", "none")) if defaults and "fx_filter" in defaults else "none"
+        def_radio = bool(defaults.get("radio_fx", False)) if defaults and "radio_fx" in defaults else (def_filter == "radio")
+
         initial_blocks = []
         for idx, sent in enumerate(candidate_sentences, 1):
-            initial_blocks.append({
+            init_b = {
                 "id": f"b_{idx}",
                 "text": sent,
                 "voice_id": default_voice,
-                "speed": 0.90,
-                "gain": 1.0,
-                "pause_after": 0.6
-            })
+                "speed": round(def_speed, 2),
+                "gain": round(def_gain, 2),
+                "pause_after": round(def_pause, 1),
+                "pitch_shift": round(def_pitch, 1),
+                "warmth": round(def_warmth, 1),
+                "clarity": round(def_clarity, 1),
+                "reverb": round(def_reverb, 2),
+                "fx_filter": def_filter,
+                "radio_fx": def_radio
+            }
+            if defaults and defaults.get("blend_weights"):
+                init_b["blend_weights"] = defaults["blend_weights"]
+            initial_blocks.append(init_b)
 
-        directed = self.auto_direct_blocks(initial_blocks, default_voice=default_voice, expand_dialogue=True)
+        directed = self.auto_direct_blocks(initial_blocks, default_voice=default_voice, expand_dialogue=True, defaults=defaults)
         return self.merge_ultra_small_blocks(directed)
 
     def merge_ultra_small_blocks(self, blocks: List[Dict], max_chars: int = 35, max_words: int = 5, max_merged_chars: int = 160) -> List[Dict]:
@@ -312,10 +347,12 @@ class ProjectManager:
                 nxt = blocks[i + 1]
                 nxt_text = (nxt.get("text") or "").strip()
 
-                # Voice matching
+                # Voice & Tone matching
                 same_voice = (curr.get("voice_id") == nxt.get("voice_id"))
                 same_blend = (curr.get("blend_weights") == nxt.get("blend_weights"))
-                if not (same_voice and same_blend):
+                same_filter = (curr.get("fx_filter", "none") == nxt.get("fx_filter", "none"))
+                same_pitch = (curr.get("pitch_shift", 0.0) == nxt.get("pitch_shift", 0.0))
+                if not (same_voice and same_blend and same_filter and same_pitch):
                     break
 
                 # Never merge colon intro leads
