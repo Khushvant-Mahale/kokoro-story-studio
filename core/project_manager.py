@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECTS_DIR = BASE_DIR / "projects"
 INPUT_DIR = BASE_DIR / "input"
+OUTPUT_DIR = BASE_DIR / "output"
 VOICES_FILE = BASE_DIR / "core" / "voices_metadata.json"
 
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -485,20 +486,61 @@ class ProjectManager:
     def list_projects(self) -> List[Dict]:
         projects = []
         for p in PROJECTS_DIR.glob("*.json"):
+            if p.name == "config.json":
+                continue
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     mtime = p.stat().st_mtime
+                    blocks = data.get("blocks", [])
+                    rendered_count = sum(1 for b in blocks if b.get("cachedAudioUrl"))
+                    total_dur = sum(float(b.get("duration", 0.0) or 0.0) for b in blocks if b.get("cachedAudioUrl"))
+                    voices_used = list(dict.fromkeys(b.get("voice_id") for b in blocks if b.get("voice_id")))
+                    preview_audio = next((b.get("cachedAudioUrl") for b in blocks if b.get("cachedAudioUrl")), None)
+                    master_file = data.get("master_filename")
+                    master_exists = bool(master_file and (OUTPUT_DIR / master_file).exists())
+
                     projects.append({
                         "id": data.get("id", p.stem),
                         "title": data.get("title", p.stem),
-                        "block_count": len(data.get("blocks", [])),
+                        "block_count": len(blocks),
+                        "rendered_count": rendered_count,
+                        "total_duration": round(total_dur, 1),
+                        "voices_used": voices_used[:5],
+                        "voice_count": len(voices_used),
+                        "preview_audio": preview_audio,
+                        "master_exists": master_exists,
+                        "master_filename": master_file if master_exists else None,
                         "updated_at": mtime
                     })
             except Exception:
                 pass
         projects.sort(key=lambda x: x["updated_at"], reverse=True)
         return projects
+
+    def duplicate_project(self, project_id: str) -> Optional[Dict]:
+        source_path = self.get_project_path(project_id)
+        if not source_path.exists():
+            return None
+        with open(source_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        import uuid
+        new_id = f"proj_{uuid.uuid4().hex[:8]}"
+        data["id"] = new_id
+        orig_title = data.get("title", "Project")
+        data["title"] = f"{orig_title} (Copy)"
+        self.save_project(data, new_id)
+        return data
+
+    def rename_project(self, project_id: str, new_title: str) -> bool:
+        path = self.get_project_path(project_id)
+        if not path.exists():
+            return False
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        data["title"] = new_title.strip() or "Untitled Project"
+        self.save_project(data, project_id)
+        return True
 
     def delete_project(self, project_id: str) -> bool:
         path = self.get_project_path(project_id)

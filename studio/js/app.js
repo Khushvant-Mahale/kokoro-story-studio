@@ -400,6 +400,14 @@ function updateEngineUI(remoteUrl, active) {
     }
   });
 
+  // Update dashboard stats strip engine card
+  const statEngineName = document.getElementById("stat-engine-name");
+  const statEngineSpeed = document.getElementById("stat-engine-speed");
+  const statEngineIcon = document.getElementById("stat-engine-icon");
+  if (statEngineName) statEngineName.textContent = isOnline ? "Colab GPU (Active)" : "Local CPU";
+  if (statEngineSpeed) statEngineSpeed.textContent = isOnline ? "~0.8s per sentence (Fast)" : "~14s per sentence";
+  if (statEngineIcon) statEngineIcon.textContent = isOnline ? "🚀" : "⚡";
+
   // Auto-configure parallel concurrency selector according to GPU vs CPU mode
   const concurrencySelect = document.getElementById("batch-concurrency-select");
   if (concurrencySelect) {
@@ -530,7 +538,7 @@ function switchToView(viewName, updateUrl = true) {
   if (viewName === "dashboard") {
     dashEl.style.display = "flex";
     studioEl.style.display = "none";
-    document.title = "Story Projects — Kokoro Studio";
+    document.title = "Story Projects — Kashva Studio TTS";
     if (updateUrl) {
       history.pushState({ view: "dashboard" }, "", "/");
     }
@@ -539,7 +547,7 @@ function switchToView(viewName, updateUrl = true) {
     dashEl.style.display = "none";
     studioEl.style.display = "flex";
     const projTitle = state.currentProject?.title || "Story Studio";
-    document.title = `${projTitle} — Kokoro Story Studio`;
+    document.title = `${projTitle} — Kashva Studio TTS`;
     if (updateUrl && state.currentProject?.id) {
       const studioUrl = `/studio?project=${encodeURIComponent(state.currentProject.id)}`;
       history.pushState({ view: "studio", projectId: state.currentProject.id }, "", studioUrl);
@@ -547,90 +555,401 @@ function switchToView(viewName, updateUrl = true) {
   }
 }
 
+// ---------------- DASHBOARD STATE & CONTROLS ---------------- //
+
+let dashboardFilter = "all";
+let dashboardSort = "recent";
+let dashboardSearchQuery = "";
+let dashboardLayout = "grid";
+let currentDashboardAudio = null;
+let activePreviewProjectId = null;
+
+function formatAudioDuration(totalSeconds) {
+  if (!totalSeconds || isNaN(totalSeconds) || totalSeconds <= 0) return "0s";
+  const sec = Math.round(totalSeconds);
+  const hrs = Math.floor(sec / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  const secs = sec % 60;
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
+
+function handleDashboardSearch(val) {
+  dashboardSearchQuery = (val || "").trim();
+  const clearBtn = document.getElementById("dashboard-search-clear");
+  if (clearBtn) clearBtn.style.display = dashboardSearchQuery ? "inline-flex" : "none";
+  renderDashboard();
+}
+
+function clearDashboardSearch() {
+  dashboardSearchQuery = "";
+  const input = document.getElementById("dashboard-search-input");
+  if (input) input.value = "";
+  const clearBtn = document.getElementById("dashboard-search-clear");
+  if (clearBtn) clearBtn.style.display = "none";
+  renderDashboard();
+}
+
+function setDashboardFilter(filter) {
+  dashboardFilter = filter;
+  const pillBtns = document.querySelectorAll("#dashboard-filter-pills .filter-pill");
+  pillBtns.forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.filter === filter);
+  });
+  renderDashboard();
+}
+
+function handleDashboardSort(sortVal) {
+  dashboardSort = sortVal;
+  renderDashboard();
+}
+
+function setDashboardLayout(layout) {
+  dashboardLayout = layout;
+  const gridBtn = document.getElementById("btn-layout-grid");
+  const listBtn = document.getElementById("btn-layout-list");
+  if (gridBtn) gridBtn.classList.toggle("active", layout === "grid");
+  if (listBtn) listBtn.classList.toggle("active", layout === "list");
+  renderDashboard();
+}
+
+async function loadSampleStoryIntoProject() {
+  openNewProjectModal();
+  await loadSampleIntoNewProject();
+}
+
+function toggleDashboardPreview(projectId, audioUrl, buttonEl) {
+  if (!audioUrl) return;
+
+  if (activePreviewProjectId === projectId && currentDashboardAudio && !currentDashboardAudio.paused) {
+    currentDashboardAudio.pause();
+    activePreviewProjectId = null;
+    if (buttonEl) {
+      buttonEl.innerHTML = "▶ Preview";
+      buttonEl.classList.remove("playing");
+    }
+    return;
+  }
+
+  if (currentDashboardAudio) {
+    currentDashboardAudio.pause();
+    currentDashboardAudio = null;
+    document.querySelectorAll(".preview-audio-btn.playing").forEach(btn => {
+      btn.innerHTML = "▶ Preview";
+      btn.classList.remove("playing");
+    });
+  }
+
+  activePreviewProjectId = projectId;
+  if (buttonEl) {
+    buttonEl.innerHTML = "⏸ Pause";
+    buttonEl.classList.add("playing");
+  }
+
+  currentDashboardAudio = new Audio(audioUrl);
+  currentDashboardAudio.onended = () => {
+    activePreviewProjectId = null;
+    if (buttonEl) {
+      buttonEl.innerHTML = "▶ Preview";
+      buttonEl.classList.remove("playing");
+    }
+  };
+  currentDashboardAudio.onerror = () => {
+    activePreviewProjectId = null;
+    if (buttonEl) {
+      buttonEl.innerHTML = "▶ Preview";
+      buttonEl.classList.remove("playing");
+    }
+    showToast("⚠️ Could not play audio preview");
+  };
+  currentDashboardAudio.play().catch(e => {
+    console.warn("Audio play prevented:", e);
+    activePreviewProjectId = null;
+    if (buttonEl) {
+      buttonEl.innerHTML = "▶ Preview";
+      buttonEl.classList.remove("playing");
+    }
+  });
+}
+
+async function handleDuplicateProject(projectId) {
+  try {
+    showToast("📋 Duplicating project...");
+    const res = await fetch("/api/projects/duplicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: projectId })
+    });
+    const data = await res.json();
+    const proj = data.project || (data.id ? data : null);
+    if (proj && data.success !== false) {
+      showToast(`✓ Duplicated as "${proj.title || "Copy"}"`);
+      await loadProjectsList();
+    } else {
+      showToast("❌ Failed to duplicate project: " + (data.error || "Unknown error"));
+    }
+  } catch (err) {
+    showToast("❌ Duplicate error: " + err.message);
+  }
+}
+
+async function handleRenameProject(projectId, currentTitle) {
+  const newTitle = prompt("Enter new project title:", currentTitle);
+  if (!newTitle || newTitle.trim() === "" || newTitle.trim() === currentTitle) {
+    return;
+  }
+  try {
+    showToast("✏️ Renaming project...");
+    const res = await fetch("/api/projects/rename", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: projectId, title: newTitle.trim() })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`✓ Renamed to "${data.title || newTitle.trim()}"`);
+      await loadProjectsList();
+    } else {
+      showToast("❌ Failed to rename: " + (data.error || "Unknown error"));
+    }
+  } catch (err) {
+    showToast("❌ Rename error: " + err.message);
+  }
+}
+
 // ---------------- VIEW 1: DASHBOARD RENDERING ---------------- //
 
 function renderDashboard() {
   const grid = document.getElementById("projects-grid");
+  if (!grid) return;
   grid.innerHTML = "";
 
-  document.getElementById("dashboard-project-count").textContent = 
-    `${state.projects.length} project${state.projects.length === 1 ? '' : 's'}`;
+  const projects = state.projects || [];
 
-  // 1. "Create New Project" Card
-  const newCard = document.createElement("div");
-  newCard.className = "project-card project-card-new";
-  newCard.innerHTML = `
-    <div class="new-icon">＋</div>
-    <div style="font-weight: 700; font-size: 15px; color: #fff;">Create New Story Project</div>
-    <div style="font-size: 12px; color: var(--text-subtle);">Type or paste a manuscript to auto-chunk</div>
-  `;
-  newCard.addEventListener("click", () => {
-    openNewProjectModal();
-  });
-  grid.appendChild(newCard);
+  // 1. Calculate top metrics strip stats
+  const totalProjectsCount = projects.length;
+  let totalSentencesCount = 0;
+  let totalRenderedAudioSec = 0;
+  let countReady = 0;
+  let countProgress = 0;
+  let countDraft = 0;
 
-  // 1b. "Import Story File" Card
-  const importCard = document.createElement("div");
-  importCard.className = "project-card project-card-import";
-  importCard.innerHTML = `
-    <div class="import-icon">📥</div>
-    <div style="font-weight: 700; font-size: 15px; color: #fff;">Import Story File</div>
-    <div style="font-size: 12px; color: var(--text-subtle);">Click or drop .txt, .md, or project .json</div>
-  `;
-  importCard.addEventListener("click", () => {
-    document.getElementById("dashboard-file-input")?.click();
-  });
-  importCard.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    importCard.classList.add("drag-over");
-  });
-  importCard.addEventListener("dragleave", () => {
-    importCard.classList.remove("drag-over");
-  });
-  importCard.addEventListener("drop", (e) => {
-    e.preventDefault();
-    importCard.classList.remove("drag-over");
-    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-      processImportedFile(e.dataTransfer.files[0], "dashboard");
+  projects.forEach(p => {
+    const total = p.block_count || 0;
+    const rendered = p.rendered_count || 0;
+    totalSentencesCount += total;
+    totalRenderedAudioSec += (p.total_duration || 0);
+
+    if (total > 0 && rendered >= total) {
+      countReady++;
+    } else if (rendered > 0) {
+      countProgress++;
+    } else {
+      countDraft++;
     }
   });
-  grid.appendChild(importCard);
 
-  // 2. Existing Project Cards
-  state.projects.forEach(p => {
-    const card = document.createElement("div");
-    card.className = "project-card";
-    const dateStr = p.updated_at ? new Date(p.updated_at * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "Recently";
-    const studioUrl = `/studio?project=${encodeURIComponent(p.id)}`;
+  const statProjects = document.getElementById("stat-total-projects");
+  if (statProjects) statProjects.textContent = totalProjectsCount;
 
-    card.innerHTML = `
-      <div>
-        <div class="project-card-title">${escapeHtml(p.title)}</div>
-        <div class="project-meta-pills">
-          <span class="meta-pill">📝 ${p.block_count} Sentences</span>
-          <span class="meta-pill">⏱ ${dateStr}</span>
+  const statSentences = document.getElementById("stat-total-sentences");
+  if (statSentences) statSentences.textContent = totalSentencesCount;
+
+  const statAudio = document.getElementById("stat-total-audio");
+  if (statAudio) statAudio.textContent = formatAudioDuration(totalRenderedAudioSec);
+
+  const dashCount = document.getElementById("dashboard-project-count");
+  if (dashCount) {
+    dashCount.textContent = `${totalProjectsCount} project${totalProjectsCount === 1 ? '' : 's'}`;
+  }
+
+  // 2. Update filter pill counts
+  const cAll = document.getElementById("filter-count-all");
+  const cReady = document.getElementById("filter-count-ready");
+  const cProg = document.getElementById("filter-count-progress");
+  const cDraft = document.getElementById("filter-count-draft");
+  if (cAll) cAll.textContent = totalProjectsCount;
+  if (cReady) cReady.textContent = countReady;
+  if (cProg) cProg.textContent = countProgress;
+  if (cDraft) cDraft.textContent = countDraft;
+
+  // 3. Apply layout mode
+  if (dashboardLayout === "list") {
+    grid.classList.add("projects-list-view");
+  } else {
+    grid.classList.remove("projects-list-view");
+  }
+
+  // 4. Filter projects
+  let filtered = [...projects];
+
+  if (dashboardSearchQuery) {
+    const q = dashboardSearchQuery.toLowerCase();
+    filtered = filtered.filter(p => (p.title || "").toLowerCase().includes(q));
+  }
+
+  if (dashboardFilter === "ready") {
+    filtered = filtered.filter(p => (p.block_count > 0 && (p.rendered_count || 0) >= p.block_count));
+  } else if (dashboardFilter === "progress") {
+    filtered = filtered.filter(p => ((p.rendered_count || 0) > 0 && (p.rendered_count || 0) < (p.block_count || 0)));
+  } else if (dashboardFilter === "draft") {
+    filtered = filtered.filter(p => ((p.rendered_count || 0) === 0));
+  }
+
+  // 5. Sort projects
+  if (dashboardSort === "recent") {
+    filtered.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+  } else if (dashboardSort === "sentences") {
+    filtered.sort((a, b) => (b.block_count || 0) - (a.block_count || 0));
+  } else if (dashboardSort === "duration") {
+    filtered.sort((a, b) => (b.total_duration || 0) - (a.total_duration || 0));
+  } else if (dashboardSort === "title") {
+    filtered.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  }
+
+  // 6. Empty state handling
+  if (filtered.length === 0) {
+    const isSearching = Boolean(dashboardSearchQuery);
+    const hasFilter = dashboardFilter !== "all";
+    grid.innerHTML = `
+      <div class="dashboard-empty-state">
+        <div class="empty-icon">${isSearching ? "🔍" : "📂"}</div>
+        <div class="empty-title">${isSearching ? `No stories match "${escapeHtml(dashboardSearchQuery)}"` : (hasFilter ? `No projects in this category` : "No projects yet")}</div>
+        <div class="empty-desc">${isSearching ? "Check spelling or search by a different story title." : (hasFilter ? "Try selecting 'All' or a different filter tab above." : "Create your first story project or load a sample manuscript to get started.")}</div>
+        <div style="display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; justify-content: center;">
+          ${isSearching ? `<button class="btn btn-secondary" onclick="clearDashboardSearch()">Clear Search</button>` : ''}
+          ${hasFilter ? `<button class="btn btn-secondary" onclick="setDashboardFilter('all')">View All Projects</button>` : ''}
+          ${!isSearching && !hasFilter ? `
+            <button class="btn btn-primary" onclick="openNewProjectModal()">＋ Create Story Project</button>
+            <button class="btn btn-secondary" onclick="loadSampleStoryIntoProject()">📖 Load Sample</button>
+          ` : ''}
         </div>
       </div>
+    `;
+    return;
+  }
+
+  // 7. Render project cards
+  filtered.forEach(p => {
+    const card = document.createElement("div");
+    card.className = "project-card";
+
+    const total = p.block_count || 0;
+    const rendered = p.rendered_count || 0;
+    const percent = total > 0 ? Math.min(100, Math.round((rendered / total) * 100)) : 0;
+
+    let statusBadgeClass = "draft";
+    let statusText = "Draft";
+    if (total > 0 && rendered >= total) {
+      statusBadgeClass = "ready";
+      statusText = "✓ Ready";
+    } else if (rendered > 0) {
+      statusBadgeClass = "progress";
+      statusText = `⚡ ${percent}%`;
+    }
+
+    const durationStr = formatAudioDuration(p.total_duration);
+    const dateStr = formatTimeAgo(p.updated_at ? p.updated_at * 1000 : null);
+    const studioUrl = `/studio?project=${encodeURIComponent(p.id)}`;
+    const isPlaying = activePreviewProjectId === p.id && currentDashboardAudio && !currentDashboardAudio.paused;
+
+    // Build cast voice badges
+    let voicePillsHtml = "";
+    if (p.voices_used && p.voices_used.length > 0) {
+      const displayVoices = p.voices_used.slice(0, 3);
+      const extraCount = p.voices_used.length - 3;
+      voicePillsHtml = displayVoices.map(vId => {
+        const vObj = state.voices ? state.voices.find(v => v.id === vId) : null;
+        let vName = vObj ? vObj.name : vId.replace(/^blend_/, "").replace(/^a[mf]_/, "").replace(/_/g, " ");
+        if (vName.length > 14) vName = vName.substring(0, 13) + "…";
+        return `<span class="voice-badge" title="Voice: ${vObj?.name || vId}">${vObj?.flag || '🎙️'} ${escapeHtml(vName)}</span>`;
+      }).join("");
+      if (extraCount > 0) {
+        voicePillsHtml += `<span class="voice-badge extra" title="${extraCount} more cast voices">+${extraCount}</span>`;
+      }
+    } else {
+      voicePillsHtml = `<span class="voice-badge" style="opacity: 0.6;">🎙️ Default</span>`;
+    }
+
+    card.innerHTML = `
+      <div class="project-card-header">
+        <div class="project-card-title" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</div>
+        <span class="proj-status-badge ${statusBadgeClass}">${statusText}</span>
+      </div>
+
+      <div class="project-render-bar" title="${rendered} of ${total} sentences rendered (${percent}%)">
+        <div class="project-render-fill" style="width: ${percent}%;"></div>
+      </div>
+
+      <div class="project-meta-grid">
+        <div class="meta-item"><span class="meta-label">Sentences:</span> <strong>${total}</strong> <span style="font-size: 11px; opacity: 0.65;">(${rendered} rendered)</span></div>
+        <div class="meta-item"><span class="meta-label">Audio:</span> <strong>${durationStr}</strong></div>
+        <div class="meta-item"><span class="meta-label">Modified:</span> <span>${dateStr}</span></div>
+      </div>
+
+      <div class="project-voices-wrap">
+        <span class="meta-label" style="font-size: 11px; color: var(--text-subtle); margin-right: 4px;">Cast:</span>
+        <div class="project-voices-pills">${voicePillsHtml}</div>
+      </div>
+
       <div class="project-card-footer">
-        <a href="${studioUrl}" target="_blank" class="btn btn-primary open-proj-btn" style="padding: 6px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">Open in Studio ↗</a>
-        <button class="icon-btn delete-proj-btn" title="Delete project" style="color: var(--text-subtle);">🗑</button>
+        <div class="footer-left-actions">
+          <a href="${studioUrl}" target="_blank" class="btn btn-primary open-proj-btn" style="padding: 6px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">Open in Studio ↗</a>
+          ${p.preview_audio ? `<button class="preview-audio-btn ${isPlaying ? 'playing' : ''}" title="Quick audition of rendered dialogue">${isPlaying ? '⏸ Pause' : '▶ Preview'}</button>` : `<button class="preview-audio-btn disabled" disabled title="Render sentences in studio to audition audio">🔇 No Audio</button>`}
+        </div>
+        <div class="footer-right-actions">
+          <button class="card-icon-btn duplicate-proj-btn" title="Duplicate project">📋</button>
+          <button class="card-icon-btn rename-proj-btn" title="Rename project">✏️</button>
+          <button class="card-icon-btn delete-proj-btn" title="Delete project">🗑️</button>
+        </div>
       </div>
     `;
 
-    card.querySelector(".open-proj-btn").addEventListener("click", (e) => {
-      e.stopPropagation();
-    });
-
+    // Click card body to open in studio (unless clicked on a button or link)
     card.addEventListener("click", (e) => {
-      if (e.target.closest(".delete-proj-btn") || e.target.closest(".open-proj-btn")) return;
+      if (e.target.closest(".open-proj-btn") ||
+          e.target.closest(".preview-audio-btn") ||
+          e.target.closest(".duplicate-proj-btn") ||
+          e.target.closest(".rename-proj-btn") ||
+          e.target.closest(".delete-proj-btn")) {
+        return;
+      }
       window.open(studioUrl, "_blank");
     });
 
-    card.querySelector(".delete-proj-btn").addEventListener("click", async (e) => {
+    // Preview button
+    const previewBtn = card.querySelector(".preview-audio-btn:not(.disabled)");
+    if (previewBtn) {
+      previewBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleDashboardPreview(p.id, p.preview_audio, previewBtn);
+      });
+    }
+
+    // Duplicate button
+    card.querySelector(".duplicate-proj-btn")?.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (confirm(`Delete project "${p.title}"?`)) {
-        await fetch(`/api/projects/${p.id}`, { method: "DELETE" });
-        loadProjectsList();
+      handleDuplicateProject(p.id);
+    });
+
+    // Rename button
+    card.querySelector(".rename-proj-btn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleRenameProject(p.id, p.title);
+    });
+
+    // Delete button
+    card.querySelector(".delete-proj-btn")?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (confirm(`Delete story project "${p.title}"? This cannot be undone.`)) {
+        try {
+          await fetch(`/api/projects/${p.id}`, { method: "DELETE" });
+          showToast(`🗑️ Deleted "${p.title}"`);
+          loadProjectsList();
+        } catch (err) {
+          showToast("❌ Failed to delete project: " + err.message);
+        }
       }
     });
 
@@ -4475,11 +4794,30 @@ function setupEventListeners() {
   document.getElementById("btn-create-project-submit")?.addEventListener("click", handleCreateProjectSubmit);
   document.getElementById("new-project-close-btn")?.addEventListener("click", closeNewProjectModal);
 
+  // Dashboard Hero Dropzone drag & drop
+  const dashDropzone = document.getElementById("dashboard-dropzone");
+  if (dashDropzone) {
+    dashDropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dashDropzone.classList.add("drag-over");
+    });
+    dashDropzone.addEventListener("dragleave", () => {
+      dashDropzone.classList.remove("drag-over");
+    });
+    dashDropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dashDropzone.classList.remove("drag-over");
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        processImportedFile(e.dataTransfer.files[0], "dashboard");
+      }
+    });
+  }
+
   // Project title rename in Studio
   document.getElementById("project-title")?.addEventListener("input", (e) => {
     if (state.currentProject) {
       state.currentProject.title = e.target.value;
-      document.title = `${e.target.value || "Story Studio"} — Kokoro Story Studio`;
+      document.title = `${e.target.value || "Story Studio"} — Kashva Studio TTS`;
       debouncedSave();
     }
   });
@@ -5612,5 +5950,14 @@ window.updateActiveCharacterStatusBanner = updateActiveCharacterStatusBanner;
 window.reorderBlock = reorderBlock;
 window.moveBlockUp = moveBlockUp;
 window.moveBlockDown = moveBlockDown;
+window.handleDashboardSearch = handleDashboardSearch;
+window.clearDashboardSearch = clearDashboardSearch;
+window.setDashboardFilter = setDashboardFilter;
+window.handleDashboardSort = handleDashboardSort;
+window.setDashboardLayout = setDashboardLayout;
+window.loadSampleStoryIntoProject = loadSampleStoryIntoProject;
+window.toggleDashboardPreview = toggleDashboardPreview;
+window.handleDuplicateProject = handleDuplicateProject;
+window.handleRenameProject = handleRenameProject;
 
 

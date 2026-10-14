@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kokoro Story Studio — Dashboard & Dynamic TTS</title>
+  <title>Kashva Studio TTS — Story Dashboard & Dynamic Speech</title>
   <link rel="icon" type="image/svg+xml" href="/studio/favicon.svg">
   <link rel="alternate icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/studio/css/studio.css?v=478">
+  <link rel="stylesheet" href="/studio/css/studio.css?v=479">
 </head>
 <body>
 
@@ -14,8 +14,8 @@
   <div id="view-dashboard">
     <header class="dashboard-header">
       <div class="brand-row">
-        <span class="brand-badge">Kokoro</span>
-        <span class="brand-title">Story Projects</span>
+        <span class="brand-badge">Kashva</span>
+        <span class="brand-title">Studio TTS</span>
       </div>
       <div style="display: flex; align-items: center; gap: 12px;">
         <button class="engine-badge-btn" id="btn-dashboard-engine-status" onclick="openColabModal()" title="Configure Cloud GPU (Google Colab / Kaggle)">
@@ -30,9 +30,91 @@
     </header>
 
     <div class="dashboard-content">
-      <div class="section-headline-row">
-        <span class="section-title">Your Audio Projects</span>
-        <span style="font-size: 13px; color: var(--text-muted);" id="dashboard-project-count">Loading projects...</span>
+      <!-- STATS & OVERVIEW METRICS STRIP -->
+      <div class="dashboard-stats-strip" id="dashboard-stats-strip">
+        <div class="stat-card">
+          <div class="stat-icon">📁</div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-total-projects">0</span>
+            <span class="stat-label">Audio Stories</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📝</div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-total-sentences">0</span>
+            <span class="stat-label">Total Sentences</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🎧</div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-total-audio">0m 0s</span>
+            <span class="stat-label">Rendered Audio</span>
+          </div>
+        </div>
+        <div class="stat-card stat-engine-card" onclick="openColabModal()" title="Click to configure Cloud GPU acceleration">
+          <div class="stat-icon" id="stat-engine-icon">⚡</div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-engine-name">Local CPU</span>
+            <span class="stat-label" id="stat-engine-speed">~14s per sentence</span>
+          </div>
+          <span class="stat-action-arrow">⚙️</span>
+        </div>
+      </div>
+
+      <!-- CREATION & DROPZONE HERO BANNER -->
+      <div class="dashboard-creation-hero">
+        <div class="creation-hero-left">
+          <div class="hero-title-group">
+            <span class="hero-headline">Create or Import Story</span>
+            <span class="hero-subtext">Chunk manuscripts automatically, direct dialogue quotes, and render studio-grade multi-voice audio.</span>
+          </div>
+          <div class="hero-buttons-row">
+            <button class="btn btn-primary" onclick="openNewProjectModal()">＋ New Story Project</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('dashboard-file-input').click()">📥 Import File (.txt, .md, .json)</button>
+            <button class="btn btn-ghost" onclick="loadSampleStoryIntoProject()" title="Quick test drive with 'The Endless Eclipse' sample manuscript">📖 Load Sample Story</button>
+          </div>
+        </div>
+        <div class="creation-dropzone-box" id="dashboard-dropzone" onclick="document.getElementById('dashboard-file-input').click()" title="Click or drop file to import">
+          <div class="dropzone-icon">📥</div>
+          <div class="dropzone-text">
+            <strong>Drop Story File Here</strong>
+            <span>.txt, .md, or project .json</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILTER, SEARCH & CONTROLS TOOLBAR -->
+      <div class="dashboard-filter-toolbar">
+        <div class="filter-toolbar-left">
+          <div class="dashboard-search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="dashboard-search-input" class="dashboard-search-input" placeholder="Search projects by title..." oninput="handleDashboardSearch(this.value)">
+            <button id="dashboard-search-clear" class="search-clear-btn" style="display: none;" onclick="clearDashboardSearch()">✕</button>
+          </div>
+          <div class="filter-pills-group" id="dashboard-filter-pills">
+            <button class="filter-pill active" data-filter="all" onclick="setDashboardFilter('all')">All (<span id="filter-count-all">0</span>)</button>
+            <button class="filter-pill" data-filter="ready" onclick="setDashboardFilter('ready')">✓ Ready (<span id="filter-count-ready">0</span>)</button>
+            <button class="filter-pill" data-filter="progress" onclick="setDashboardFilter('progress')">⚡ In Progress (<span id="filter-count-progress">0</span>)</button>
+            <button class="filter-pill" data-filter="draft" onclick="setDashboardFilter('draft')">📝 Drafts (<span id="filter-count-draft">0</span>)</button>
+          </div>
+        </div>
+        <div class="filter-toolbar-right">
+          <div class="sort-select-wrap">
+            <span style="font-size: 12px; color: var(--text-muted);">Sort:</span>
+            <select id="dashboard-sort-select" class="dashboard-sort-select" onchange="handleDashboardSort(this.value)">
+              <option value="recent">🕒 Recently Modified</option>
+              <option value="sentences">📝 Most Sentences</option>
+              <option value="duration">⏱ Longest Audio</option>
+              <option value="title">🔤 Title (A → Z)</option>
+            </select>
+          </div>
+          <div class="layout-toggle-group">
+            <button class="layout-btn active" id="btn-layout-grid" onclick="setDashboardLayout('grid')" title="Grid view">⊞</button>
+            <button class="layout-btn" id="btn-layout-list" onclick="setDashboardLayout('list')" title="List view">☰</button>
+          </div>
+        </div>
       </div>
 
       <div class="projects-grid" id="projects-grid">
@@ -772,6 +854,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=478"></script>
+  <script src="/studio/js/app.js?v=479"></script>
 </body>
 </html>

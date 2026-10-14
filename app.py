@@ -260,6 +260,27 @@ async def handle_save_project(request):
     return web.json_response({"status": "saved", "id": proj_id})
 
 
+async def handle_duplicate_project(request):
+    data = await request.json()
+    proj_id = data.get("id")
+    if not proj_id:
+        return web.json_response({"error": "id is required"}, status=400)
+    cloned = project_mgr.duplicate_project(proj_id)
+    if not cloned:
+        return web.json_response({"error": "project not found"}, status=404)
+    return web.json_response({"success": True, "project": cloned})
+
+
+async def handle_rename_project(request):
+    data = await request.json()
+    proj_id = data.get("id")
+    title = (data.get("title") or "").strip()
+    if not proj_id or not title:
+        return web.json_response({"error": "id and title are required"}, status=400)
+    ok = project_mgr.rename_project(proj_id, title)
+    return web.json_response({"success": ok, "id": proj_id, "title": title})
+
+
 async def handle_split_text(request):
     data = await request.json()
     text = data.get("text", "")
@@ -417,6 +438,8 @@ def create_app():
     app.router.add_post("/api/export_zip", handle_export_zip)
     app.router.add_get("/api/projects", handle_get_projects)
     app.router.add_post("/api/projects/new", handle_create_project)
+    app.router.add_post("/api/projects/duplicate", handle_duplicate_project)
+    app.router.add_post("/api/projects/rename", handle_rename_project)
     app.router.add_delete("/api/projects/{id}", handle_delete_project)
     app.router.add_get("/api/project", handle_get_project)
     app.router.add_post("/api/project", handle_save_project)
@@ -438,7 +461,7 @@ def create_app():
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Kokoro Studio Server")
+    parser = argparse.ArgumentParser(description="Kashva Studio TTS Server")
     parser.add_argument("--port", type=int, default=7860, help="Port to listen on (default 7860)")
     parser.add_argument("--test", action="store_true", help="Initialize and exit for testing")
     args = parser.parse_args()
@@ -448,11 +471,11 @@ if __name__ == "__main__":
     loop.run_until_complete(init_engine())
 
     if args.test:
-        print("[Kokoro Studio] Self-test passed successfully.")
+        print("[Kashva Studio] Self-test passed successfully.")
         exit(0)
 
     app = create_app()
     print("\n=======================================================")
-    print(f"  Kokoro Story Studio running at: http://localhost:{args.port}")
+    print(f"  Kashva Studio TTS running at: http://localhost:{args.port}")
     print("=======================================================\n")
     web.run_app(app, host="127.0.0.1", port=args.port)
