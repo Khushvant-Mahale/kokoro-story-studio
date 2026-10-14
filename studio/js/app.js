@@ -23,7 +23,8 @@ const state = {
   savedCharacters: [],
   selectedCharacterColor: "#6366f1",
   editingCharacterId: null,
-  charModalFxFilter: "none"
+  charModalFxFilter: "none",
+  draggedBlockIndex: null
 };
 
 // ---------------- UTILITIES & HELPERS ---------------- //
@@ -655,6 +656,16 @@ function renderBlocks() {
 
       sceneRow.innerHTML = `
         <div class="scene-divider-left">
+          <div class="block-drag-handle scene-drag-handle" title="Drag to change order (or press Alt+↑ / Alt+↓)">
+            <svg class="drag-handle-icon" width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+              <circle cx="2.5" cy="2.5" r="1.5"/>
+              <circle cx="7.5" cy="2.5" r="1.5"/>
+              <circle cx="2.5" cy="8" r="1.5"/>
+              <circle cx="7.5" cy="8" r="1.5"/>
+              <circle cx="2.5" cy="13.5" r="1.5"/>
+              <circle cx="7.5" cy="13.5" r="1.5"/>
+            </svg>
+          </div>
           <span class="scene-badge-icon" title="Scene / Chapter Divider">🎬</span>
           <div class="scene-content-col">
             <div class="scene-meta-row">
@@ -669,6 +680,8 @@ function renderBlocks() {
             <span>⏱ Pause:</span>
             <input type="number" class="scene-pause-input" value="${pVal}" min="0" max="10" step="0.5">s
           </div>
+          <button type="button" class="order-btn" onclick="moveBlockUp(${idx})" title="Move up (Alt+↑)">▲</button>
+          <button type="button" class="order-btn" onclick="moveBlockDown(${idx})" title="Move down (Alt+↓)">▼</button>
           <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert sentence below this divider">＋</button>
           <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert another scene divider below" style="font-size: 13px;">🎬</button>
           <button type="button" class="scene-btn convert-speech-btn" onclick="convertHeadingToSpeech(${idx})" title="Convert to regular spoken sentence block">🎙️ Speak</button>
@@ -677,6 +690,7 @@ function renderBlocks() {
       `;
 
       container.appendChild(sceneRow);
+      attachBlockDragAndDrop(sceneRow, idx);
 
       const titleInput = sceneRow.querySelector(".scene-title-input");
       titleInput.addEventListener("input", (e) => {
@@ -703,7 +717,7 @@ function renderBlocks() {
       });
 
       sceneRow.addEventListener("click", (e) => {
-        if (e.target.closest("button") || e.target.closest("input")) return;
+        if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".block-drag-handle")) return;
         selectBlock(idx, "single");
       });
 
@@ -732,8 +746,18 @@ function renderBlocks() {
       ? `Character: ${char.name} (${voice.name})${isCustom ? ' • Customized for this sentence' : ' • Synced'}`
       : `Voice: ${voice.name} (Click to change)`;
 
-    // SENTENCE BLOCK WITH AUDIO SCRUBBER & SLEEK CUSTOM CHECKBOX
+    // SENTENCE BLOCK WITH AUDIO SCRUBBER, DRAG HANDLE & SLEEK CUSTOM CHECKBOX
     row.innerHTML = `
+      <div class="block-drag-handle" title="Drag to change order (or press Alt+↑ / Alt+↓)">
+        <svg class="drag-handle-icon" width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="2.5" cy="2.5" r="1.5"/>
+          <circle cx="7.5" cy="2.5" r="1.5"/>
+          <circle cx="2.5" cy="8" r="1.5"/>
+          <circle cx="7.5" cy="8" r="1.5"/>
+          <circle cx="2.5" cy="13.5" r="1.5"/>
+          <circle cx="7.5" cy="13.5" r="1.5"/>
+        </svg>
+      </div>
       <button class="block-select-btn" data-index="${idx}" title="${isSelected ? 'Deselect sentence' : 'Select sentence'}">
         <span class="custom-chk-box"></span>
       </button>
@@ -753,6 +777,8 @@ function renderBlocks() {
         </div>
       </div>
       <div class="block-actions">
+        <button type="button" class="order-btn" onclick="moveBlockUp(${idx})" title="Move sentence up (Alt+↑)">▲</button>
+        <button type="button" class="order-btn" onclick="moveBlockDown(${idx})" title="Move sentence down (Alt+↓)">▼</button>
         <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert new sentence below (Ctrl+Enter)">＋</button>
         <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert non-spoken Scene Heading below (🎬)" style="font-size: 13px;">🎬</button>
         <button type="button" class="play-block-btn" title="Play sentence (or Space)">${isPlaying ? "🔊" : "▶"}</button>
@@ -761,6 +787,7 @@ function renderBlocks() {
     `;
 
     container.appendChild(row);
+    attachBlockDragAndDrop(row, idx);
 
     const selBtn = row.querySelector(".block-select-btn");
     selBtn.addEventListener("click", (e) => {
@@ -1029,6 +1056,17 @@ function updateSelectionUI() {
   if (btnDelete) {
     btnDelete.style.display = count > 1 ? "inline-flex" : "none";
     btnDelete.textContent = `🗑️ Delete (${count})`;
+  }
+
+  const btnMoveUp = document.getElementById("btn-move-block-up");
+  const btnMoveDown = document.getElementById("btn-move-block-down");
+  if (btnMoveUp) {
+    btnMoveUp.textContent = count > 1 ? `⬆ Move Up (${count})` : "⬆ Move Up";
+    btnMoveUp.title = `Move ${count > 1 ? `${count} selected sentences` : 'sentence'} up (Alt+↑)`;
+  }
+  if (btnMoveDown) {
+    btnMoveDown.textContent = count > 1 ? `⬇ Move Down (${count})` : "⬇ Move Down";
+    btnMoveDown.title = `Move ${count > 1 ? `${count} selected sentences` : 'sentence'} down (Alt+↓)`;
   }
 
   // Update Apply to Selected inspector buttons
@@ -4765,6 +4803,18 @@ function setupEventListeners() {
       }
     }
 
+    // Reorder shortcuts: Alt+ArrowUp to move up, Alt+ArrowDown to move down
+    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      const currentIdx = typeof state.activeBlockIndex === "number" ? state.activeBlockIndex : 0;
+      if (e.key === "ArrowUp") {
+        moveBlockUp(currentIdx);
+      } else {
+        moveBlockDown(currentIdx);
+      }
+      return;
+    }
+
     if (["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName)) return;
     if (e.code === "Space" && state.currentView === "studio") {
       e.preventDefault();
@@ -4778,6 +4828,24 @@ function setupEventListeners() {
       closeHistoryDropdown();
     }
   });
+
+  // Blocks container drop handler (for dropping below all blocks)
+  const blocksContainer = document.getElementById("blocks-container");
+  if (blocksContainer) {
+    blocksContainer.addEventListener("dragover", (e) => {
+      if (state.draggedBlockIndex === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    });
+    blocksContainer.addEventListener("drop", (e) => {
+      if (e.target === blocksContainer && state.draggedBlockIndex !== null) {
+        e.preventDefault();
+        const fromIdx = state.draggedBlockIndex;
+        const toIdx = state.currentProject?.blocks?.length || 0;
+        reorderBlock(fromIdx, toIdx);
+      }
+    });
+  }
 
   // Modal Backdrop Clicks
   const colabModal = document.getElementById("colab-modal");
@@ -5012,6 +5080,197 @@ function deleteBlock(idx) {
   renderStudio();
   debouncedSave();
   showToast(`✓ ${itemType} deleted.`);
+}
+
+// ---------------- DRAG & DROP REORDERING ENGINE ---------------- //
+
+function attachBlockDragAndDrop(row, idx) {
+  const handle = row.querySelector(".block-drag-handle");
+  if (!handle) return;
+
+  // Make row draggable only when user interacts with the grip handle
+  handle.addEventListener("mouseenter", () => {
+    row.setAttribute("draggable", "true");
+  });
+  handle.addEventListener("mouseleave", () => {
+    if (!row.classList.contains("is-dragging")) {
+      row.removeAttribute("draggable");
+    }
+  });
+
+  row.addEventListener("dragstart", (e) => {
+    state.draggedBlockIndex = idx;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(idx));
+    row.classList.add("is-dragging");
+
+    if (!state.selectedBlockIndices.has(idx)) {
+      selectBlock(idx, "single");
+    }
+  });
+
+  row.addEventListener("dragend", () => {
+    row.removeAttribute("draggable");
+    row.classList.remove("is-dragging");
+    state.draggedBlockIndex = null;
+    document.querySelectorAll(".drop-indicator-above, .drop-indicator-below").forEach(el => {
+      el.classList.remove("drop-indicator-above", "drop-indicator-below");
+    });
+  });
+
+  row.addEventListener("dragover", (e) => {
+    if (state.draggedBlockIndex === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+
+    const rect = row.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const isUpper = relY < rect.height / 2;
+
+    if (isUpper) {
+      row.classList.add("drop-indicator-above");
+      row.classList.remove("drop-indicator-below");
+    } else {
+      row.classList.add("drop-indicator-below");
+      row.classList.remove("drop-indicator-above");
+    }
+  });
+
+  row.addEventListener("dragleave", (e) => {
+    if (!row.contains(e.relatedTarget)) {
+      row.classList.remove("drop-indicator-above", "drop-indicator-below");
+    }
+  });
+
+  row.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    row.classList.remove("drop-indicator-above", "drop-indicator-below");
+    if (state.draggedBlockIndex === null) return;
+
+    const fromIdx = state.draggedBlockIndex;
+    const rect = row.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const isUpper = relY < rect.height / 2;
+    const toIdx = isUpper ? idx : idx + 1;
+
+    reorderBlock(fromIdx, toIdx);
+  });
+}
+
+function reorderBlock(fromIdx, toIdx) {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const blocks = state.currentProject.blocks;
+  if (fromIdx < 0 || fromIdx >= blocks.length) return;
+
+  const isMultiDrag = Boolean(
+    state.selectedBlockIndices &&
+    state.selectedBlockIndices.size > 1 &&
+    state.selectedBlockIndices.has(fromIdx)
+  );
+
+  let finalTargetIndex = 0;
+
+  if (!isMultiDrag) {
+    let target = toIdx;
+    if (target > fromIdx) target -= 1;
+    if (target === fromIdx) return; // Same position, no-op
+
+    target = Math.max(0, Math.min(target, blocks.length - 1));
+
+    const item = blocks[fromIdx];
+    const itemLabel = (item.type === "heading" || item.is_spoken === false) ? "Scene Heading" : "Sentence";
+    recordHistory(`Move ${itemLabel} to Row ${target + 1}`);
+
+    const [moved] = blocks.splice(fromIdx, 1);
+    blocks.splice(target, 0, moved);
+
+    state.activeBlockIndex = target;
+    state.selectedBlockIndices = new Set([target]);
+    finalTargetIndex = target;
+  } else {
+    const sortedIndices = Array.from(state.selectedBlockIndices).sort((a, b) => a - b);
+    const targetBlockRef = (toIdx >= 0 && toIdx < blocks.length) ? blocks[toIdx] : null;
+
+    recordHistory(`Reorder ${sortedIndices.length} Blocks`);
+
+    const selectedBlocks = sortedIndices.map(i => blocks[i]);
+
+    // Remove in reverse order
+    for (let i = sortedIndices.length - 1; i >= 0; i--) {
+      blocks.splice(sortedIndices[i], 1);
+    }
+
+    let insertPos = targetBlockRef ? blocks.indexOf(targetBlockRef) : blocks.length;
+    if (insertPos === -1) insertPos = blocks.length;
+
+    blocks.splice(insertPos, 0, ...selectedBlocks);
+
+    const newSelection = new Set();
+    for (let i = 0; i < selectedBlocks.length; i++) {
+      newSelection.add(insertPos + i);
+    }
+    state.selectedBlockIndices = newSelection;
+    state.activeBlockIndex = insertPos;
+    finalTargetIndex = insertPos;
+  }
+
+  renderStudio();
+  debouncedSave();
+
+  setTimeout(() => {
+    const rows = document.querySelectorAll(".block-row, .scene-divider-row");
+    const targetRow = rows[finalTargetIndex];
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, 30);
+
+  showToast(`↕️ Reordered: position ${finalTargetIndex + 1} of ${state.currentProject.blocks.length}`);
+}
+
+function moveBlockUp(idx) {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const blocks = state.currentProject.blocks;
+  const targetIdx = (typeof idx === "number" && idx >= 0 && idx < blocks.length) ? idx : state.activeBlockIndex;
+  if (targetIdx <= 0) {
+    showToast("ℹ️ Already at the top of the story.");
+    return;
+  }
+
+  if (state.selectedBlockIndices && state.selectedBlockIndices.size > 1 && state.selectedBlockIndices.has(targetIdx)) {
+    const sorted = Array.from(state.selectedBlockIndices).sort((a, b) => a - b);
+    if (sorted[0] <= 0) {
+      showToast("ℹ️ Selected sentences are already at the very top.");
+      return;
+    }
+    reorderBlock(targetIdx, sorted[0] - 1);
+    return;
+  }
+
+  reorderBlock(targetIdx, targetIdx - 1);
+}
+
+function moveBlockDown(idx) {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const blocks = state.currentProject.blocks;
+  const targetIdx = (typeof idx === "number" && idx >= 0 && idx < blocks.length) ? idx : state.activeBlockIndex;
+  if (targetIdx >= blocks.length - 1) {
+    showToast("ℹ️ Already at the bottom of the story.");
+    return;
+  }
+
+  if (state.selectedBlockIndices && state.selectedBlockIndices.size > 1 && state.selectedBlockIndices.has(targetIdx)) {
+    const sorted = Array.from(state.selectedBlockIndices).sort((a, b) => a - b);
+    if (sorted[sorted.length - 1] >= blocks.length - 1) {
+      showToast("ℹ️ Selected sentences are already at the very bottom.");
+      return;
+    }
+    reorderBlock(targetIdx, sorted[sorted.length - 1] + 2);
+    return;
+  }
+
+  reorderBlock(targetIdx, targetIdx + 2);
 }
 
 function insertBlockAfter(idx) {
@@ -5306,5 +5565,8 @@ window.revertActiveBlockToCharacter = revertActiveBlockToCharacter;
 window.pullActiveSentenceToCharModal = pullActiveSentenceToCharModal;
 window.selectCharModalFilter = selectCharModalFilter;
 window.updateActiveCharacterStatusBanner = updateActiveCharacterStatusBanner;
+window.reorderBlock = reorderBlock;
+window.moveBlockUp = moveBlockUp;
+window.moveBlockDown = moveBlockDown;
 
 

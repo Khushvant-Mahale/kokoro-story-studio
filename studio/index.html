@@ -367,6 +367,12 @@
             <button class="action-pill-btn" id="btn-auto-split" onclick="handleAutoSplitAll()" title="Split multi-sentence paragraphs into individual sentences for 5x faster rendering">
               ✂️ Auto-Split Sentences
             </button>
+            <button class="action-pill-btn" id="btn-move-block-up" onclick="moveBlockUp(state.activeBlockIndex)" title="Move active or selected sentence up (Alt+↑)">
+              ⬆ Move Up
+            </button>
+            <button class="action-pill-btn" id="btn-move-block-down" onclick="moveBlockDown(state.activeBlockIndex)" title="Move active or selected sentence down (Alt+↓)">
+              ⬇ Move Down
+            </button>
             <button class="action-pill-btn primary" id="btn-bulk-change-voice" onclick="openVoiceDrawer()" title="Change voice for selected sentences" style="display: none;">
               👥 Voice
             </button>
@@ -772,6 +778,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=474"></script>
+  <script src="/studio/js/app.js?v=475"></script>
 </body>
 </html>
