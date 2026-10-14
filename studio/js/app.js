@@ -296,6 +296,31 @@ async function initApp() {
     await loadProjectsList();
     await loadConfig();
     setupEventListeners();
+
+    // Check URL parameters for direct studio deep-linking
+    const urlParams = new URLSearchParams(window.location.search);
+    const projectId = urlParams.get("project") || urlParams.get("id");
+    const isStudioPath = window.location.pathname.startsWith("/studio");
+
+    if (projectId) {
+      await openProject(projectId, false);
+    } else if (isStudioPath && state.projects && state.projects.length > 0) {
+      await openProject(state.projects[0].id, false);
+    } else {
+      switchToView("dashboard", false);
+    }
+
+    // Handle browser back/forward buttons
+    window.addEventListener("popstate", (e) => {
+      const params = new URLSearchParams(window.location.search);
+      const pid = params.get("project") || params.get("id");
+      const isStudio = window.location.pathname.startsWith("/studio");
+      if (pid && (!state.currentProject || state.currentProject.id !== pid)) {
+        openProject(pid, false);
+      } else if (!pid && !isStudio) {
+        switchToView("dashboard", false);
+      }
+    });
   } catch (err) {
     console.error("Initialization error:", err);
   }
@@ -414,9 +439,10 @@ function updateEngineUI(remoteUrl, active) {
   }
 }
 
-async function openProject(projectId) {
+async function openProject(projectId, updateUrl = true) {
   try {
     const res = await fetch(`/api/project?id=${encodeURIComponent(projectId)}&t=${Date.now()}`);
+    if (!res.ok) throw new Error("Project not found");
     state.currentProject = await res.json();
     state.activeBlockIndex = 0;
     state.selectedBlockIndices = new Set([0]);
@@ -437,10 +463,12 @@ async function openProject(projectId) {
         }
       });
     }
-    switchToView("studio");
+    switchToView("studio", updateUrl);
     renderStudio();
   } catch (err) {
-    alert("Failed to load project: " + err);
+    console.error("Failed to load project: " + err);
+    showToast("⚠️ Could not load project. Returning to dashboard.");
+    switchToView("dashboard", true);
   }
 }
 
@@ -492,9 +520,9 @@ function getVoiceById(voiceId) {
   };
 }
 
-// ---------------- VIEW ROUTING ---------------- //
+// ---------------- VIEW ROUTING & DIRECT LINKING ---------------- //
 
-function switchToView(viewName) {
+function switchToView(viewName, updateUrl = true) {
   state.currentView = viewName;
   const dashEl = document.getElementById("view-dashboard");
   const studioEl = document.getElementById("view-studio");
@@ -502,10 +530,20 @@ function switchToView(viewName) {
   if (viewName === "dashboard") {
     dashEl.style.display = "flex";
     studioEl.style.display = "none";
+    document.title = "Story Projects — Kokoro Studio";
+    if (updateUrl) {
+      history.pushState({ view: "dashboard" }, "", "/");
+    }
     loadProjectsList();
   } else {
     dashEl.style.display = "none";
     studioEl.style.display = "flex";
+    const projTitle = state.currentProject?.title || "Story Studio";
+    document.title = `${projTitle} — Kokoro Story Studio`;
+    if (updateUrl && state.currentProject?.id) {
+      const studioUrl = `/studio?project=${encodeURIComponent(state.currentProject.id)}`;
+      history.pushState({ view: "studio", projectId: state.currentProject.id }, "", studioUrl);
+    }
   }
 }
 
@@ -563,28 +601,29 @@ function renderDashboard() {
     const card = document.createElement("div");
     card.className = "project-card";
     const dateStr = p.updated_at ? new Date(p.updated_at * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "Recently";
+    const studioUrl = `/studio?project=${encodeURIComponent(p.id)}`;
 
     card.innerHTML = `
       <div>
-        <div class="project-card-title">${p.title}</div>
+        <div class="project-card-title">${escapeHtml(p.title)}</div>
         <div class="project-meta-pills">
           <span class="meta-pill">📝 ${p.block_count} Sentences</span>
           <span class="meta-pill">⏱ ${dateStr}</span>
         </div>
       </div>
       <div class="project-card-footer">
-        <button class="btn btn-primary open-proj-btn" style="padding: 6px 14px;">Open in Studio →</button>
+        <a href="${studioUrl}" target="_blank" class="btn btn-primary open-proj-btn" style="padding: 6px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">Open in Studio ↗</a>
         <button class="icon-btn delete-proj-btn" title="Delete project" style="color: var(--text-subtle);">🗑</button>
       </div>
     `;
 
     card.querySelector(".open-proj-btn").addEventListener("click", (e) => {
       e.stopPropagation();
-      openProject(p.id);
     });
 
-    card.addEventListener("click", () => {
-      openProject(p.id);
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".delete-proj-btn") || e.target.closest(".open-proj-btn")) return;
+      window.open(studioUrl, "_blank");
     });
 
     card.querySelector(".delete-proj-btn").addEventListener("click", async (e) => {
@@ -4077,7 +4116,8 @@ function processImportedFile(file, targetContext) {
           const newProj = await res.json();
           if (newProj && newProj.id) {
             closeNewProjectModal();
-            openProject(newProj.id);
+            window.open(`/studio?project=${encodeURIComponent(newProj.id)}`, "_blank");
+            loadProjectsList();
             showToast(`✓ Project "${title}" imported with ${parsed.blocks.length} sentences!`);
             return;
           }
@@ -4132,7 +4172,8 @@ async function handleCreateProjectSubmit() {
 
     const newProj = await res.json();
     closeNewProjectModal();
-    openProject(newProj.id);
+    window.open(`/studio?project=${encodeURIComponent(newProj.id)}`, "_blank");
+    loadProjectsList();
   } catch (err) {
     alert("Could not create project: " + err);
   }
@@ -4438,6 +4479,7 @@ function setupEventListeners() {
   document.getElementById("project-title")?.addEventListener("input", (e) => {
     if (state.currentProject) {
       state.currentProject.title = e.target.value;
+      document.title = `${e.target.value || "Story Studio"} — Kokoro Story Studio`;
       debouncedSave();
     }
   });

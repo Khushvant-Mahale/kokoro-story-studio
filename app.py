@@ -48,7 +48,7 @@ async def init_engine():
 @web.middleware
 async def no_cache_middleware(request, handler):
     resp = await handler(request)
-    if request.path.startswith("/studio") or request.path == "/":
+    if request.path.startswith("/studio") or request.path == "/" or request.path.startswith("/projects"):
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
@@ -405,6 +405,9 @@ async def handle_favicon(request):
 def create_app():
     app = web.Application(middlewares=[no_cache_middleware])
     app.router.add_get("/", handle_index)
+    app.router.add_get("/studio", handle_index)
+    app.router.add_get("/studio/", handle_index)
+    app.router.add_get("/projects", handle_index)
     app.router.add_get("/favicon.ico", handle_favicon)
     app.router.add_get("/studio/favicon.svg", handle_favicon)
     app.router.add_get("/api/voices", handle_get_voices)
