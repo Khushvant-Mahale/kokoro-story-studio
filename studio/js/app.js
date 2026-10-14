@@ -680,10 +680,14 @@ function renderBlocks() {
             <span>⏱ Pause:</span>
             <input type="number" class="scene-pause-input" value="${pVal}" min="0" max="10" step="0.5">s
           </div>
-          <button type="button" class="order-btn" onclick="moveBlockUp(${idx})" title="Move up (Alt+↑)">▲</button>
-          <button type="button" class="order-btn" onclick="moveBlockDown(${idx})" title="Move down (Alt+↓)">▼</button>
-          <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert sentence below this divider">＋</button>
-          <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert another scene divider below" style="font-size: 13px;">🎬</button>
+          <div class="block-btn-cluster reorder-cluster">
+            <button type="button" class="order-btn" onclick="moveBlockUp(${idx})" title="Move up (Alt+↑)">▲</button>
+            <button type="button" class="order-btn" onclick="moveBlockDown(${idx})" title="Move down (Alt+↓)">▼</button>
+          </div>
+          <div class="block-btn-cluster insert-cluster">
+            <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert sentence below this divider">＋</button>
+            <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert another scene divider below" style="font-size: 13px;">🎬</button>
+          </div>
           <button type="button" class="scene-btn convert-speech-btn" onclick="convertHeadingToSpeech(${idx})" title="Convert to regular spoken sentence block">🎙️ Speak</button>
           <button type="button" class="scene-delete-btn" onclick="deleteBlock(${idx})" title="Delete scene heading">✕</button>
         </div>
@@ -777,10 +781,14 @@ function renderBlocks() {
         </div>
       </div>
       <div class="block-actions">
-        <button type="button" class="order-btn" onclick="moveBlockUp(${idx})" title="Move sentence up (Alt+↑)">▲</button>
-        <button type="button" class="order-btn" onclick="moveBlockDown(${idx})" title="Move sentence down (Alt+↓)">▼</button>
-        <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert new sentence below (Ctrl+Enter)">＋</button>
-        <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert non-spoken Scene Heading below (🎬)" style="font-size: 13px;">🎬</button>
+        <div class="block-btn-cluster reorder-cluster">
+          <button type="button" class="order-btn" onclick="moveBlockUp(${idx})" title="Move sentence up (Alt+↑)">▲</button>
+          <button type="button" class="order-btn" onclick="moveBlockDown(${idx})" title="Move sentence down (Alt+↓)">▼</button>
+        </div>
+        <div class="block-btn-cluster insert-cluster">
+          <button type="button" class="insert-block-btn" onclick="insertBlockAfter(${idx})" title="Insert new sentence below (Ctrl+Enter)">＋</button>
+          <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert non-spoken Scene Heading below (🎬)" style="font-size: 13px;">🎬</button>
+        </div>
         <button type="button" class="play-block-btn" title="Play sentence (or Space)">${isPlaying ? "🔊" : "▶"}</button>
         <button type="button" class="delete-block-btn" onclick="deleteBlock(${idx})" title="Delete sentence">✕</button>
       </div>

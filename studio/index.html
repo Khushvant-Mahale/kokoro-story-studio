@@ -6,7 +6,7 @@
   <title>Kokoro Story Studio — Dashboard & Dynamic TTS</title>
   <link rel="icon" type="image/svg+xml" href="/studio/favicon.svg">
   <link rel="alternate icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/studio/css/studio.css?v=476">
+  <link rel="stylesheet" href="/studio/css/studio.css?v=477">
 </head>
 <body>
 
@@ -327,9 +327,9 @@
         <!-- CANVAS SELECTION TOOLBAR -->
         <div class="canvas-action-bar" id="canvas-action-bar">
           <div class="action-bar-left">
-            <button class="action-pill-btn icon-hover-btn" id="btn-toggle-select-all" onclick="toggleSelectAll()" title="Select or Deselect all sentences in this story">
-              <span class="btn-icon" id="select-all-icon">☐</span>
-              <span class="btn-hover-text" id="select-all-label">Select All</span>
+            <button class="action-pill-btn" id="btn-toggle-select-all" onclick="toggleSelectAll()" title="Select or Deselect all sentences in this story">
+              <span id="select-all-icon">☐</span>
+              <span id="select-all-label">Select All</span>
             </button>
             <span id="bulk-selection-count-text" class="selection-count-pill" style="display: none;">0 Selected</span>
 
@@ -358,17 +358,14 @@
             </div>
           </div>
           <div class="action-bar-right" id="bulk-action-buttons">
-            <button class="action-pill-btn icon-hover-btn" id="btn-auto-direct" onclick="handleAutoDirectStory()" title="Auto-detect characters, dialogue quotes, whispers, screaming, and emotional pacing across the entire story">
-              <span class="btn-icon">🎭</span>
-              <span class="btn-hover-text">Auto-Direct Story</span>
+            <button class="action-pill-btn" id="btn-auto-direct" onclick="handleAutoDirectStory()" title="Auto-detect characters, dialogue quotes, whispers, screaming, and emotional pacing across the entire story">
+              🎭 Auto-Direct Story
             </button>
-            <button class="action-pill-btn icon-hover-btn" id="btn-merge-short" onclick="handleMergeShortBlocks()" title="Merge ultra-small consecutive sentences of the same narrator (e.g. 'No network. No emergency lines.') into single blocks">
-              <span class="btn-icon">🔗</span>
-              <span class="btn-hover-text">Merge Short</span>
+            <button class="action-pill-btn" id="btn-merge-short" onclick="handleMergeShortBlocks()" title="Merge ultra-small consecutive sentences of the same narrator (e.g. 'No network. No emergency lines.') into single blocks">
+              🔗 Merge Short
             </button>
-            <button class="action-pill-btn icon-hover-btn" id="btn-auto-split" onclick="handleAutoSplitAll()" title="Split multi-sentence paragraphs into individual sentences for 5x faster rendering">
-              <span class="btn-icon">✂️</span>
-              <span class="btn-hover-text">Auto-Split Sentences</span>
+            <button class="action-pill-btn" id="btn-auto-split" onclick="handleAutoSplitAll()" title="Split multi-sentence paragraphs into individual sentences for 5x faster rendering">
+              ✂️ Auto-Split Sentences
             </button>
             <button class="action-pill-btn primary" id="btn-bulk-change-voice" onclick="openVoiceDrawer()" title="Change voice for selected sentences" style="display: none;">
               👥 Voice
@@ -775,6 +772,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=476"></script>
+  <script src="/studio/js/app.js?v=477"></script>
 </body>
 </html>
