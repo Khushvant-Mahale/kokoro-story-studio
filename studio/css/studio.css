@@ -2316,6 +2316,30 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-main);
 }
 
+/* Character Status & Custom Tweak Badges */
+.character-status-banner {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 
+.custom-tweak-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 9px;
+  height: 9px;
+  background-color: #f59e0b;
+  border: 1.5px solid var(--bg-surface);
+  border-radius: 50%;
+  box-shadow: 0 0 5px rgba(245, 158, 11, 0.7);
+}
 
-
+.block-avatar {
+  position: relative;
+}

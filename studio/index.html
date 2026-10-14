@@ -207,9 +207,14 @@
               <input type="range" id="slider-reverb" min="0" max="40" step="5" value="0">
             </div>
 
-            <button type="button" class="btn btn-secondary" id="btn-apply-settings-to-selected" onclick="handleApplySettingsToSelected()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px; margin-top: 4px;" title="Apply current pacing, pitch, warmth, clarity, reverb and filter (from last clicked sentence) to selected sentence(s)">
-              ⚡ Apply Audio & Pacing to Selected
-            </button>
+            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+              <button type="button" class="btn btn-primary btn-apply-both-to-selected" onclick="handleApplyVoiceAndSettingsToSelected()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Apply active voice AND all audio/pacing/filter settings to selected sentence(s)">
+                ✨ Apply Voice & Settings to Selected
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-apply-settings-to-selected" onclick="handleApplySettingsToSelected()" style="width: 100%; font-size: 11px; justify-content: center; padding: 5px 8px;" title="Apply current pacing, pitch, warmth, clarity, reverb and filter (from last clicked sentence) to selected sentence(s)">
+                ⚡ Apply Audio FX & Pacing Only
+              </button>
+            </div>
           </div>
         </div>
 
@@ -221,6 +226,10 @@
               <span class="section-label" id="inspector-voice-section-label">Active Voice</span>
               <span id="default-voice-indicator" style="font-size: 11px; font-weight: 600; color: var(--accent);"></span>
             </div>
+            
+            <!-- Character Link & Custom Status Banner -->
+            <div id="inspector-character-link-banner" style="display: none;"></div>
+
             <div class="voice-card-trigger" id="inspector-voice-card" title="Click to choose a different voice">
               <div class="voice-avatar-badge" id="inspector-voice-avatar" style="background-color: #ea580c">FO</div>
               <div class="voice-meta-col">
@@ -232,8 +241,11 @@
               <button class="action-pill-btn" id="btn-make-default-voice" onclick="handleMakeDefaultVoice()" style="width: 100%; justify-content: center; font-size: 11.5px; border-radius: 6px; padding: 6px 10px;" title="Set this voice as the default narrator for story text">
                 ★ Make Default Story Narrator
               </button>
-              <button type="button" class="btn btn-secondary" id="btn-apply-voice-to-selected" onclick="handleApplyVoiceToSelected()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 6px 10px;" title="Apply the currently active voice (from last clicked sentence) to selected sentence(s)">
-                🎭 Apply Voice to Selected
+              <button type="button" class="btn btn-primary btn-apply-both-to-selected" onclick="handleApplyVoiceAndSettingsToSelected()" style="width: 100%; font-size: 11.5px; justify-content: center; padding: 7px 10px;" title="Apply active voice AND all audio/pacing/filter settings to selected sentence(s)">
+                ✨ Apply Voice & Settings to Selected
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-apply-voice-to-selected" onclick="handleApplyVoiceToSelected()" style="width: 100%; font-size: 11px; justify-content: center; padding: 5px 8px;" title="Apply only the voice actor (from last clicked sentence) to selected sentence(s)">
+                🎭 Apply Voice Only
               </button>
             </div>
           </div>
@@ -624,10 +636,10 @@
     </div>
   </div>
 
-  <!-- ================= SAVE CHARACTER MODAL ================= -->
+  <!-- ================= SAVE & EDIT CHARACTER MODAL ================= -->
   <div class="drawer-backdrop" id="save-character-modal">
-    <div class="drawer-window" style="width: 500px; max-width: 95vw;">
-      <div class="drawer-header">
+    <div class="drawer-window" style="width: 540px; max-width: 95vw; max-height: 90vh; overflow-y: auto;">
+      <div class="drawer-header" style="position: sticky; top: 0; background: var(--bg-surface); z-index: 10;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 18px;">🎭</span>
           <span class="drawer-title" id="save-character-modal-title">Save Character Voice</span>
@@ -635,22 +647,111 @@
         <button class="icon-btn" onclick="closeSaveCharacterModal()" style="font-size: 18px;">✕</button>
       </div>
       <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+        
+        <!-- Character Name Input -->
         <div>
           <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px;">Character Name</label>
           <input type="text" id="char-modal-name-input" class="search-input" placeholder="e.g. Detective Cole, Sarah (Heroine), Demon Lord...">
         </div>
 
-        <!-- Settings Preview Card -->
+        <!-- Voice Actor Selection -->
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px;">Voice Actor</label>
+          <select id="char-modal-voice-select" class="search-input" style="padding: 8px 10px; font-size: 13px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: var(--radius-sm); width: 100%;">
+            <!-- Dynamically populated with all Kokoro voices -->
+          </select>
+        </div>
+
+        <!-- Live Preview Card & Linked Sentences Summary -->
         <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div id="char-modal-avatar-preview" class="voice-avatar-badge" style="background-color: #6366f1; width: 36px; height: 36px; font-size: 13px;">CH</div>
-            <div style="display: flex; flex-direction: column;">
-              <span id="char-modal-voice-name" style="font-weight: 700; font-size: 13.5px; color: #fff;">Voice Name</span>
-              <span id="char-modal-voice-sub" style="font-size: 11px; color: var(--text-muted);">Voice details</span>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div id="char-modal-avatar-preview" class="voice-avatar-badge" style="background-color: #6366f1; width: 36px; height: 36px; font-size: 13px;">CH</div>
+              <div style="display: flex; flex-direction: column;">
+                <span id="char-modal-voice-name" style="font-weight: 700; font-size: 13.5px; color: #fff;">Voice Name</span>
+                <span id="char-modal-voice-sub" style="font-size: 11px; color: var(--text-muted);">Voice details</span>
+              </div>
             </div>
+            <button type="button" class="btn btn-secondary" onclick="pullActiveSentenceToCharModal()" style="font-size: 11px; padding: 4px 8px;" title="Grab speech & tone settings from the currently selected sentence in your story">
+              📥 Pull from Active Sentence
+            </button>
           </div>
-          <div id="char-modal-dsp-summary" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
-            <!-- Rendered dynamically -->
+          <div id="char-modal-linked-info" style="font-size: 11.5px; color: #60a5fa; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); padding: 7px 10px; border-radius: 6px; display: none; line-height: 1.45;">
+            <!-- Linked sentences sync message -->
+          </div>
+        </div>
+
+        <!-- Pacing & Acoustics -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-subtle); text-transform: uppercase; letter-spacing: 0.5px;">Pacing & Acoustics</div>
+          
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Pacing Speed</span>
+              <span class="control-val" id="char-val-speed">0.90x</span>
+            </div>
+            <input type="range" id="char-slider-speed" min="0.70" max="1.30" step="0.02" value="0.90">
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Trailing Breath Gap</span>
+              <span class="control-val" id="char-val-pause">0.6s</span>
+            </div>
+            <input type="range" id="char-slider-pause" min="0.0" max="3.0" step="0.1" value="0.6">
+          </div>
+        </div>
+
+        <!-- Voice Tone & DSP Controls -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-subtle); text-transform: uppercase; letter-spacing: 0.5px;">Voice Audio & Tone (DSP)</div>
+          
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Voice Pitch</span>
+              <span class="control-val" id="char-val-pitch">0.0 st</span>
+            </div>
+            <input type="range" id="char-slider-pitch" min="-6.0" max="6.0" step="0.5" value="0.0">
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Warmth (Bass EQ)</span>
+              <span class="control-val" id="char-val-warmth">0.0 dB</span>
+            </div>
+            <input type="range" id="char-slider-warmth" min="-6.0" max="6.0" step="0.5" value="0.0">
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Clarity (Air Presence)</span>
+              <span class="control-val" id="char-val-clarity">0.0 dB</span>
+            </div>
+            <input type="range" id="char-slider-clarity" min="-6.0" max="6.0" step="0.5" value="0.0">
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span>Atmosphere (Reverb)</span>
+              <span class="control-val" id="char-val-reverb">0%</span>
+            </div>
+            <input type="range" id="char-slider-reverb" min="0" max="40" step="5" value="0">
+          </div>
+        </div>
+
+        <!-- Acoustic FX Filter Selector -->
+        <div>
+          <div class="control-label-row" style="margin-bottom: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Acoustic FX Filter</span>
+            <span class="control-val" id="char-val-filter" style="color: var(--primary); font-weight: 700; font-size: 12px;">Clean Studio</span>
+          </div>
+          <div class="fx-filter-grid" id="char-fx-grid">
+            <button type="button" class="fx-filter-btn active" data-filter="none" onclick="selectCharModalFilter('none')">🎙️ Clean Studio</button>
+            <button type="button" class="fx-filter-btn" data-filter="radio" onclick="selectCharModalFilter('radio')">📻 Radio</button>
+            <button type="button" class="fx-filter-btn" data-filter="whisper" onclick="selectCharModalFilter('whisper')">🤫 Soft Whisper</button>
+            <button type="button" class="fx-filter-btn" data-filter="scream" onclick="selectCharModalFilter('scream')">😱 Intense Scream</button>
+            <button type="button" class="fx-filter-btn" data-filter="demon" onclick="selectCharModalFilter('demon')">👹 Deep Demon</button>
+            <button type="button" class="fx-filter-btn" data-filter="youth" onclick="selectCharModalFilter('youth')">🧚 Child / Youth</button>
           </div>
         </div>
 
@@ -662,7 +763,7 @@
           </div>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border-color);">
           <button type="button" class="btn btn-secondary" onclick="closeSaveCharacterModal()">Cancel</button>
           <button type="button" class="btn btn-primary" id="btn-save-character-confirm" onclick="confirmSaveCharacter()">💾 Save Character</button>
         </div>
@@ -671,6 +772,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=472"></script>
+  <script src="/studio/js/app.js?v=474"></script>
 </body>
 </html>

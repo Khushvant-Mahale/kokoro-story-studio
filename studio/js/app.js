@@ -21,7 +21,9 @@ const state = {
   undoStack: [],
   redoStack: [],
   savedCharacters: [],
-  selectedCharacterColor: "#6366f1"
+  selectedCharacterColor: "#6366f1",
+  editingCharacterId: null,
+  charModalFxFilter: "none"
 };
 
 // ---------------- UTILITIES & HELPERS ---------------- //
@@ -627,6 +629,11 @@ function showToast(msg) {
   }, 3000);
 }
 
+function getCharacterById(charId) {
+  if (!charId || !state.savedCharacters) return null;
+  return state.savedCharacters.find(c => c.id === charId) || null;
+}
+
 function renderBlocks() {
   const container = document.getElementById("story-container");
   const canvas = document.querySelector(".editor-canvas");
@@ -717,14 +724,23 @@ function renderBlocks() {
 
     const durText = isReady ? (block.duration ? `● ${block.duration.toFixed(1)}s` : "● Ready") : "Draft (click ▶ to render)";
 
+    const char = getCharacterById(block.character_id);
+    const blockColor = (char && char.color) ? char.color : voice.color;
+    const blockBadge = (char && char.badge) ? char.badge : (voice.badge || voice.id.slice(0, 2).toUpperCase());
+    const isCustom = Boolean(char && block.is_custom_edited);
+    const blockTitle = char
+      ? `Character: ${char.name} (${voice.name})${isCustom ? ' • Customized for this sentence' : ' • Synced'}`
+      : `Voice: ${voice.name} (Click to change)`;
+
     // SENTENCE BLOCK WITH AUDIO SCRUBBER & SLEEK CUSTOM CHECKBOX
     row.innerHTML = `
       <button class="block-select-btn" data-index="${idx}" title="${isSelected ? 'Deselect sentence' : 'Select sentence'}">
         <span class="custom-chk-box"></span>
       </button>
-      <button class="block-voice-btn" title="Voice: ${voice.name} (Click to change)">
-        <div class="block-avatar" style="background-color: ${voice.color}">
-          ${voice.badge || voice.id.slice(0, 2).toUpperCase()}
+      <button class="block-voice-btn" title="${escapeHtml(blockTitle)}">
+        <div class="block-avatar" style="background-color: ${blockColor}">
+          ${escapeHtml(blockBadge)}
+          ${isCustom ? '<span class="custom-tweak-dot" title="Custom tweaked sentence"></span>' : ''}
         </div>
       </button>
       <div class="block-content-col">
@@ -1024,8 +1040,12 @@ function updateSelectionUI() {
     btnApplyVoice.textContent = count > 1 ? `🎭 Apply Voice to Selected (${count})` : "🎭 Apply Voice to Selected";
   }
   if (btnApplySettings) {
-    btnApplySettings.textContent = count > 1 ? `⚡ Apply Audio FX & Pacing to Selected (${count})` : "⚡ Apply Audio FX & Pacing to Selected";
+    btnApplySettings.textContent = count > 1 ? `⚡ Apply Audio FX & Pacing Only (${count})` : "⚡ Apply Audio FX & Pacing Only";
   }
+  const btnApplyBothList = document.querySelectorAll(".btn-apply-both-to-selected");
+  btnApplyBothList.forEach(btn => {
+    btn.textContent = count > 1 ? `✨ Apply Voice & Settings to Selected (${count})` : "✨ Apply Voice & Settings to Selected";
+  });
   if (applySelectedBadge) {
     applySelectedBadge.textContent = count > 1 ? `${count} Selected` : "1 Sentence";
   }
@@ -1297,6 +1317,12 @@ function handleApplyVoiceToSelected() {
     } else {
       delete b.blend_weights;
     }
+    if (activeBlock.character_id) {
+      b.character_id = activeBlock.character_id;
+      b.is_custom_edited = Boolean(activeBlock.is_custom_edited);
+    } else if (b.character_id) {
+      b.is_custom_edited = true;
+    }
     delete b.cachedAudioUrl;
     delete b.cachedSig;
     delete b.duration;
@@ -1368,6 +1394,9 @@ function handleApplySettingsToSelected() {
     b.reverb = reverbVal;
     b.radio_fx = (filterVal === "radio");
     b.fx_filter = filterVal;
+    if (b.character_id) {
+      b.is_custom_edited = true;
+    }
     delete b.cachedAudioUrl;
     delete b.cachedSig;
     delete b.duration;
@@ -1383,6 +1412,72 @@ function handleApplySettingsToSelected() {
   renderStudio();
   debouncedSave();
   showToast(`⚡ Applied pacing, pitch, EQ & filter to ${spokenTargets.length} selected sentences!`);
+}
+
+function handleApplyVoiceAndSettingsToSelected() {
+  if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : (state.selectedBlockIndices && state.selectedBlockIndices.size > 0 ? Array.from(state.selectedBlockIndices)[0] : 0);
+  const activeBlock = state.currentProject.blocks[activeIdx];
+  if (!activeBlock || activeBlock.type === "heading" || activeBlock.is_spoken === false) {
+    showToast("⚠️ Select a source spoken sentence first.");
+    return;
+  }
+
+  const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
+    ? Array.from(state.selectedBlockIndices)
+    : [activeIdx];
+
+  const spokenTargets = targets.filter(idx => {
+    const b = state.currentProject.blocks[idx];
+    return b && b.type !== "heading" && b.is_spoken !== false;
+  });
+
+  if (spokenTargets.length <= 1) {
+    showToast("ℹ️ Use checkboxes or Select All to select multiple sentences to apply voice & settings to.");
+    return;
+  }
+
+  recordHistory(`Apply Voice & Settings to Selected (${spokenTargets.length})`);
+
+  spokenTargets.forEach(idx => {
+    const b = state.currentProject.blocks[idx];
+    if (!b) return;
+
+    b.voice_id = activeBlock.voice_id;
+    if (activeBlock.blend_weights) {
+      b.blend_weights = JSON.parse(JSON.stringify(activeBlock.blend_weights));
+    } else {
+      delete b.blend_weights;
+    }
+
+    b.speed = activeBlock.speed !== undefined ? activeBlock.speed : 0.90;
+    b.gain = activeBlock.gain !== undefined ? activeBlock.gain : 1.0;
+    b.pause_after = activeBlock.pause_after !== undefined ? activeBlock.pause_after : 0.6;
+    b.pitch_shift = Number(activeBlock.pitch_shift || 0.0);
+    b.warmth = Number(activeBlock.warmth || 0.0);
+    b.clarity = Number(activeBlock.clarity || 0.0);
+    b.reverb = Number(activeBlock.reverb || 0.0);
+    b.fx_filter = activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none");
+    b.radio_fx = Boolean(activeBlock.radio_fx || activeBlock.fx_filter === "radio");
+
+    if (activeBlock.character_id) {
+      b.character_id = activeBlock.character_id;
+      b.is_custom_edited = Boolean(activeBlock.is_custom_edited);
+    } else {
+      delete b.character_id;
+      delete b.is_custom_edited;
+    }
+
+    delete b.cachedAudioUrl;
+    delete b.cachedSig;
+    delete b.duration;
+  });
+
+  renderStudio();
+  debouncedSave();
+  showToast(`✨ Applied Voice & All Settings to ${spokenTargets.length} selected sentences!`);
 }
 
 function handleApplyVoiceToAll() {
@@ -1563,12 +1658,22 @@ function renderSavedCharactersList() {
         </div>
       </div>
       <div class="saved-char-actions">
-        <button type="button" class="saved-char-btn" title="Apply to selected sentence(s)">Apply</button>
+        <button type="button" class="saved-char-btn" title="Apply character to selected sentence(s)">Apply</button>
         <button type="button" class="saved-char-icon-btn" title="Update character with current panel settings" data-action="update">🔄</button>
-        <button type="button" class="saved-char-icon-btn" title="Rename character" data-action="rename">✏️</button>
+        <button type="button" class="saved-char-icon-btn" title="Edit character voice & settings" data-action="edit">✏️</button>
         <button type="button" class="saved-char-icon-btn danger" title="Delete character" data-action="delete">✕</button>
       </div>
     `;
+
+    // Click on name allows quick rename via double-click
+    const nameEl = card.querySelector(".saved-char-name");
+    if (nameEl) {
+      nameEl.title = "Double-click to quick rename";
+      nameEl.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        renameCharacter(char.id);
+      });
+    }
 
     card.addEventListener("click", () => {
       applyCharacterToSelected(char.id);
@@ -1582,11 +1687,11 @@ function renderSavedCharactersList() {
       });
     }
 
-    const renameBtn = card.querySelector('[data-action="rename"]');
-    if (renameBtn) {
-      renameBtn.addEventListener("click", (e) => {
+    const editBtn = card.querySelector('[data-action="edit"]');
+    if (editBtn) {
+      editBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        renameCharacter(char.id);
+        openEditCharacterModal(char.id);
       });
     }
 
@@ -1602,6 +1707,177 @@ function renderSavedCharactersList() {
   });
 }
 
+// ---------------- CHARACTER MODAL & AUTO-SYNC ENGINE ---------------- //
+
+function populateCharModalVoiceSelect() {
+  const select = document.getElementById("char-modal-voice-select");
+  if (!select || !state.voices || state.voices.length === 0) return;
+
+  const html = state.voices.map(v => {
+    return `<option value="${v.id}">${v.flag || "🎙️"} ${v.name} (${v.accent} ${v.gender}) - ${v.timbre || 'Voice'}</option>`;
+  }).join("");
+  select.innerHTML = html;
+}
+
+function setCharModalSlider(sliderId, valId, value, formatter) {
+  const slider = document.getElementById(sliderId);
+  const valEl = document.getElementById(valId);
+  if (slider) slider.value = value;
+  if (valEl) valEl.textContent = formatter(value);
+}
+
+function selectCharModalFilter(filterName) {
+  state.charModalFxFilter = (filterName || "none").toLowerCase();
+  const grid = document.getElementById("char-fx-grid");
+  if (grid) {
+    grid.querySelectorAll(".fx-filter-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.filter === state.charModalFxFilter);
+    });
+  }
+  const labelEl = document.getElementById("char-val-filter");
+  if (labelEl) {
+    const labels = {
+      none: "Clean Studio",
+      radio: "Radio",
+      whisper: "Soft Whisper",
+      scream: "Intense Scream",
+      demon: "Deep Demon",
+      youth: "Child / Youth"
+    };
+    labelEl.textContent = labels[state.charModalFxFilter] || state.charModalFxFilter;
+  }
+}
+
+function renderCharModalPalette(selectedColor) {
+  state.selectedCharacterColor = selectedColor || "#6366f1";
+  const paletteEl = document.getElementById("char-modal-color-palette");
+  const avatarPreview = document.getElementById("char-modal-avatar-preview");
+  if (avatarPreview) {
+    avatarPreview.style.backgroundColor = state.selectedCharacterColor;
+  }
+  if (!paletteEl) return;
+  paletteEl.innerHTML = "";
+  CHARACTER_COLOR_PALETTE.forEach(color => {
+    const sw = document.createElement("div");
+    sw.className = `char-color-swatch ${color === state.selectedCharacterColor ? 'active' : ''}`;
+    sw.style.backgroundColor = color;
+    sw.addEventListener("click", () => {
+      state.selectedCharacterColor = color;
+      paletteEl.querySelectorAll(".char-color-swatch").forEach(s => s.classList.remove("active"));
+      sw.classList.add("active");
+      if (avatarPreview) avatarPreview.style.backgroundColor = color;
+    });
+    paletteEl.appendChild(sw);
+  });
+}
+
+function updateCharModalVoiceDetails(voiceId) {
+  const voice = getVoiceById(voiceId);
+  const nameEl = document.getElementById("char-modal-voice-name");
+  const subEl = document.getElementById("char-modal-voice-sub");
+  if (nameEl) nameEl.textContent = voice.name;
+  if (subEl) subEl.textContent = voice.timbre ? `${voice.gender.toUpperCase()} • ${voice.timbre}` : voice.gender.toUpperCase();
+}
+
+function pullActiveSentenceToCharModal() {
+  if (!state.currentProject?.blocks) return;
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : 0;
+  const block = state.currentProject.blocks[activeIdx];
+  if (!block || block.type === "heading" || block.is_spoken === false) {
+    showToast("⚠️ Active block is not a spoken sentence.");
+    return;
+  }
+
+  // Voice Actor
+  const voiceSelect = document.getElementById("char-modal-voice-select");
+  if (voiceSelect && block.voice_id) {
+    voiceSelect.value = block.voice_id;
+    updateCharModalVoiceDetails(block.voice_id);
+  }
+
+  // Sliders
+  const speed = block.speed !== undefined ? Number(block.speed) : 0.90;
+  const pause = block.pause_after !== undefined ? Number(block.pause_after) : 0.6;
+  const pitch = Number(block.pitch_shift || 0.0);
+  const warmth = Number(block.warmth || 0.0);
+  const clarity = Number(block.clarity || 0.0);
+  const reverb = Number(block.reverb || 0.0);
+  const filter = (block.fx_filter || (block.radio_fx ? "radio" : "none")).toLowerCase();
+
+  setCharModalSlider("char-slider-speed", "char-val-speed", speed, v => `${Number(v).toFixed(2)}x`);
+  setCharModalSlider("char-slider-pause", "char-val-pause", pause, v => `${Number(v).toFixed(1)}s`);
+  setCharModalSlider("char-slider-pitch", "char-val-pitch", pitch, v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} st`);
+  setCharModalSlider("char-slider-warmth", "char-val-warmth", warmth, v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} dB`);
+  setCharModalSlider("char-slider-clarity", "char-val-clarity", clarity, v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} dB`);
+  setCharModalSlider("char-slider-reverb", "char-val-reverb", Math.round(reverb * 100), v => `${v}%`);
+  selectCharModalFilter(filter);
+
+  showToast("📥 Pulled voice actor & tone settings from active sentence!");
+}
+
+function openEditCharacterModal(charId) {
+  const char = getCharacterById(charId);
+  if (!char) return;
+
+  state.editingCharacterId = charId;
+  populateCharModalVoiceSelect();
+
+  const modal = document.getElementById("save-character-modal");
+  const titleEl = document.getElementById("save-character-modal-title");
+  const confirmBtn = document.getElementById("btn-save-character-confirm");
+  const nameInput = document.getElementById("char-modal-name-input");
+  const avatarPreview = document.getElementById("char-modal-avatar-preview");
+  const voiceSelect = document.getElementById("char-modal-voice-select");
+  const linkedInfo = document.getElementById("char-modal-linked-info");
+
+  if (titleEl) titleEl.textContent = `Edit Character: ${char.name}`;
+  if (confirmBtn) confirmBtn.innerHTML = `💾 Save & Sync Character`;
+  if (nameInput) {
+    nameInput.value = char.name;
+    setTimeout(() => { nameInput.focus(); nameInput.select(); }, 50);
+  }
+
+  if (voiceSelect) {
+    voiceSelect.value = char.voice_id;
+  }
+  updateCharModalVoiceDetails(char.voice_id);
+
+  // Sliders
+  setCharModalSlider("char-slider-speed", "char-val-speed", Number(char.speed !== undefined ? char.speed : 0.90), v => `${Number(v).toFixed(2)}x`);
+  setCharModalSlider("char-slider-pause", "char-val-pause", Number(char.pause_after !== undefined ? char.pause_after : 0.6), v => `${Number(v).toFixed(1)}s`);
+  setCharModalSlider("char-slider-pitch", "char-val-pitch", Number(char.pitch_shift || 0.0), v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} st`);
+  setCharModalSlider("char-slider-warmth", "char-val-warmth", Number(char.warmth || 0.0), v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} dB`);
+  setCharModalSlider("char-slider-clarity", "char-val-clarity", Number(char.clarity || 0.0), v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} dB`);
+  setCharModalSlider("char-slider-reverb", "char-val-reverb", Math.round(Number(char.reverb || 0.0) * 100), v => `${v}%`);
+  selectCharModalFilter(char.fx_filter || (char.radio_fx ? "radio" : "none"));
+
+  renderCharModalPalette(char.color || "#6366f1");
+
+  if (avatarPreview) {
+    avatarPreview.textContent = char.badge || char.name.slice(0, 2).toUpperCase();
+  }
+
+  // Linked Sentences Count calculation
+  if (linkedInfo && state.currentProject?.blocks) {
+    const linkedBlocks = state.currentProject.blocks.filter(b => b.character_id === char.id);
+    const customCount = linkedBlocks.filter(b => b.is_custom_edited === true).length;
+    const syncableCount = linkedBlocks.length - customCount;
+
+    if (linkedBlocks.length === 0) {
+      linkedInfo.innerHTML = `ℹ️ No sentences currently assigned to this character in this story.`;
+    } else if (customCount === 0) {
+      linkedInfo.innerHTML = `🔗 <strong>${linkedBlocks.length} sentence${linkedBlocks.length > 1 ? 's' : ''}</strong> in this story will update immediately upon saving.`;
+    } else {
+      linkedInfo.innerHTML = `🔗 <strong>${syncableCount} sentence${syncableCount !== 1 ? 's' : ''}</strong> will update immediately. <br><span style="color: #fbbf24;">🛡️ ${customCount} custom-edited sentence${customCount > 1 ? 's' : ''} will be strictly preserved.</span>`;
+    }
+    linkedInfo.style.display = "block";
+  }
+
+  if (modal) modal.classList.add("active");
+}
+
 function handleOpenSaveCharacterModal() {
   if (!state.currentProject || !state.currentProject.blocks) return;
   const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
@@ -1613,16 +1889,19 @@ function handleOpenSaveCharacterModal() {
     return;
   }
 
-  const voiceObj = getVoiceById(activeBlock.voice_id);
+  state.editingCharacterId = null; // Create mode
+  populateCharModalVoiceSelect();
+
   const modal = document.getElementById("save-character-modal");
+  const titleEl = document.getElementById("save-character-modal-title");
+  const confirmBtn = document.getElementById("btn-save-character-confirm");
   const nameInput = document.getElementById("char-modal-name-input");
   const avatarPreview = document.getElementById("char-modal-avatar-preview");
-  const voiceNameEl = document.getElementById("char-modal-voice-name");
-  const voiceSubEl = document.getElementById("char-modal-voice-sub");
-  const dspSummaryEl = document.getElementById("char-modal-dsp-summary");
-  const paletteEl = document.getElementById("char-modal-color-palette");
+  const voiceSelect = document.getElementById("char-modal-voice-select");
+  const linkedInfo = document.getElementById("char-modal-linked-info");
 
-  state.selectedCharacterColor = voiceObj.color || "#6366f1";
+  if (titleEl) titleEl.textContent = "Save Character Voice";
+  if (confirmBtn) confirmBtn.innerHTML = `💾 Save Character`;
 
   const existingCount = (state.savedCharacters?.length || 0) + 1;
   if (nameInput) {
@@ -1630,64 +1909,38 @@ function handleOpenSaveCharacterModal() {
     setTimeout(() => { nameInput.focus(); nameInput.select(); }, 50);
   }
 
+  if (voiceSelect && activeBlock.voice_id) {
+    voiceSelect.value = activeBlock.voice_id;
+  }
+  updateCharModalVoiceDetails(activeBlock.voice_id);
+
+  // Sliders
+  const speed = activeBlock.speed !== undefined ? Number(activeBlock.speed) : 0.90;
+  const pause = activeBlock.pause_after !== undefined ? Number(activeBlock.pause_after) : 0.6;
+  const pitch = Number(activeBlock.pitch_shift || 0.0);
+  const warmth = Number(activeBlock.warmth || 0.0);
+  const clarity = Number(activeBlock.clarity || 0.0);
+  const reverb = Number(activeBlock.reverb || 0.0);
+  const filter = (activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none")).toLowerCase();
+
+  setCharModalSlider("char-slider-speed", "char-val-speed", speed, v => `${Number(v).toFixed(2)}x`);
+  setCharModalSlider("char-slider-pause", "char-val-pause", pause, v => `${Number(v).toFixed(1)}s`);
+  setCharModalSlider("char-slider-pitch", "char-val-pitch", pitch, v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} st`);
+  setCharModalSlider("char-slider-warmth", "char-val-warmth", warmth, v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} dB`);
+  setCharModalSlider("char-slider-clarity", "char-val-clarity", clarity, v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)} dB`);
+  setCharModalSlider("char-slider-reverb", "char-val-reverb", Math.round(reverb * 100), v => `${v}%`);
+  selectCharModalFilter(filter);
+
+  const voiceObj = getVoiceById(activeBlock.voice_id);
+  renderCharModalPalette(voiceObj.color || "#6366f1");
+
   if (avatarPreview) {
-    avatarPreview.style.backgroundColor = state.selectedCharacterColor;
     avatarPreview.textContent = `C${existingCount}`;
   }
 
-  if (voiceNameEl) voiceNameEl.textContent = voiceObj.name;
-  if (voiceSubEl) voiceSubEl.textContent = voiceObj.timbre ? `${voiceObj.gender.toUpperCase()} • ${voiceObj.timbre}` : voiceObj.gender.toUpperCase();
-
-  if (dspSummaryEl) {
-    dspSummaryEl.innerHTML = "";
-    const speed = activeBlock.speed !== undefined ? Number(activeBlock.speed).toFixed(2) : "0.90";
-    const pitch = Number(activeBlock.pitch_shift || 0);
-    const warmth = Number(activeBlock.warmth || 0);
-    const clarity = Number(activeBlock.clarity || 0);
-    const reverb = Number(activeBlock.reverb || 0);
-    const filter = (activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none")).toLowerCase();
-
-    const pills = [
-      `${speed}x Speed`,
-      `${Math.round((activeBlock.gain || 1.0) * 100)}% Vol`,
-      `${(activeBlock.pause_after || 0.6).toFixed(1)}s Pause`
-    ];
-    if (pitch !== 0) pills.push(`${pitch > 0 ? '+' : ''}${pitch.toFixed(1)}st Pitch`);
-    if (warmth !== 0) pills.push(`Warmth ${warmth > 0 ? '+' : ''}${warmth.toFixed(1)}dB`);
-    if (clarity !== 0) pills.push(`Clarity ${clarity > 0 ? '+' : ''}${clarity.toFixed(1)}dB`);
-    if (reverb > 0) pills.push(`${Math.round(reverb * 100)}% Reverb`);
-    if (filter !== "none") pills.push(`Filter: ${filter.toUpperCase()}`);
-
-    pills.forEach(pText => {
-      const sp = document.createElement("span");
-      sp.className = "char-dsp-pill";
-      sp.textContent = pText;
-      dspSummaryEl.appendChild(sp);
-    });
+  if (linkedInfo) {
+    linkedInfo.style.display = "none";
   }
-
-  if (paletteEl) {
-    paletteEl.innerHTML = "";
-    CHARACTER_COLOR_PALETTE.forEach(color => {
-      const sw = document.createElement("div");
-      sw.className = `char-color-swatch ${color === state.selectedCharacterColor ? 'active' : ''}`;
-      sw.style.backgroundColor = color;
-      sw.addEventListener("click", () => {
-        state.selectedCharacterColor = color;
-        paletteEl.querySelectorAll(".char-color-swatch").forEach(s => s.classList.remove("active"));
-        sw.classList.add("active");
-        if (avatarPreview) avatarPreview.style.backgroundColor = color;
-      });
-      paletteEl.appendChild(sw);
-    });
-  }
-
-  nameInput?.addEventListener("input", (e) => {
-    const val = e.target.value.trim();
-    if (avatarPreview) {
-      avatarPreview.textContent = val ? val.slice(0, 2).toUpperCase() : `C${existingCount}`;
-    }
-  });
 
   if (modal) modal.classList.add("active");
 }
@@ -1705,43 +1958,161 @@ function confirmSaveCharacter() {
     return;
   }
 
-  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
-    ? state.activeBlockIndex
-    : 0;
-  const activeBlock = state.currentProject.blocks[activeIdx];
-  if (!activeBlock) return;
+  const voiceSelect = document.getElementById("char-modal-voice-select");
+  const voiceId = voiceSelect?.value || "blend_fenrir_onyx";
+  const speed = parseFloat(document.getElementById("char-slider-speed")?.value || 0.90);
+  const pause = parseFloat(document.getElementById("char-slider-pause")?.value || 0.6);
+  const pitch = parseFloat(document.getElementById("char-slider-pitch")?.value || 0.0);
+  const warmth = parseFloat(document.getElementById("char-slider-warmth")?.value || 0.0);
+  const clarity = parseFloat(document.getElementById("char-slider-clarity")?.value || 0.0);
+  const reverb = parseInt(document.getElementById("char-slider-reverb")?.value || 0, 10) / 100.0;
+  const filter = state.charModalFxFilter || "none";
+  const color = state.selectedCharacterColor || "#6366f1";
+  const badge = charName.slice(0, 2).toUpperCase();
 
-  const newChar = {
-    id: "char_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
-    name: charName,
-    voice_id: activeBlock.voice_id || state.currentProject.default_voice || "blend_fenrir_onyx",
-    speed: activeBlock.speed !== undefined ? Number(activeBlock.speed) : 0.90,
-    gain: activeBlock.gain !== undefined ? Number(activeBlock.gain) : 1.0,
-    pause_after: activeBlock.pause_after !== undefined ? Number(activeBlock.pause_after) : 0.6,
-    pitch_shift: Number(activeBlock.pitch_shift || 0.0),
-    warmth: Number(activeBlock.warmth || 0.0),
-    clarity: Number(activeBlock.clarity || 0.0),
-    reverb: Number(activeBlock.reverb || 0.0),
-    fx_filter: activeBlock.fx_filter || (activeBlock.radio_fx ? "radio" : "none"),
-    radio_fx: Boolean(activeBlock.radio_fx || activeBlock.fx_filter === "radio"),
-    color: state.selectedCharacterColor || "#6366f1",
-    badge: charName.slice(0, 2).toUpperCase()
-  };
+  if (state.editingCharacterId) {
+    // Edit existing character
+    const char = getCharacterById(state.editingCharacterId);
+    if (!char) return;
 
-  if (activeBlock.blend_weights) {
-    newChar.blend_weights = JSON.parse(JSON.stringify(activeBlock.blend_weights));
+    recordHistory(`Edit Character: ${charName}`);
+
+    char.name = charName;
+    char.voice_id = voiceId;
+    char.speed = speed;
+    char.pause_after = pause;
+    char.pitch_shift = pitch;
+    char.warmth = warmth;
+    char.clarity = clarity;
+    char.reverb = reverb;
+    char.fx_filter = filter;
+    char.radio_fx = (filter === "radio");
+    char.color = color;
+    char.badge = badge;
+
+    const voiceObj = getVoiceById(voiceId);
+    if (voiceObj.blend_weights) {
+      char.blend_weights = JSON.parse(JSON.stringify(voiceObj.blend_weights));
+    } else {
+      delete char.blend_weights;
+    }
+
+    saveSavedCharactersToStorage();
+    const syncRes = syncCharacterToBlocks(char.id);
+    closeSaveCharacterModal();
+    renderSavedCharactersList();
+    renderStudio();
+
+    let msg = `✓ Updated character "${char.name}"`;
+    if (syncRes.updatedCount > 0) {
+      msg += ` & synced ${syncRes.updatedCount} sentence${syncRes.updatedCount > 1 ? 's' : ''}`;
+    }
+    if (syncRes.skippedCustomCount > 0) {
+      msg += ` (${syncRes.skippedCustomCount} custom-edited preserved)`;
+    }
+    showToast(msg + "!");
+  } else {
+    // Create new character
+    const newChar = {
+      id: "char_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
+      name: charName,
+      voice_id: voiceId,
+      speed: speed,
+      gain: 1.0,
+      pause_after: pause,
+      pitch_shift: pitch,
+      warmth: warmth,
+      clarity: clarity,
+      reverb: reverb,
+      fx_filter: filter,
+      radio_fx: (filter === "radio"),
+      color: color,
+      badge: badge
+    };
+
+    const voiceObj = getVoiceById(voiceId);
+    if (voiceObj.blend_weights) {
+      newChar.blend_weights = JSON.parse(JSON.stringify(voiceObj.blend_weights));
+    }
+
+    if (!state.savedCharacters) state.savedCharacters = [];
+    state.savedCharacters.push(newChar);
+    saveSavedCharactersToStorage();
+
+    // Assign this character to active sentence if unassigned
+    const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+      ? state.activeBlockIndex
+      : 0;
+    const activeBlock = state.currentProject.blocks[activeIdx];
+    if (activeBlock && !activeBlock.character_id && activeBlock.type !== "heading") {
+      activeBlock.character_id = newChar.id;
+      activeBlock.is_custom_edited = false;
+      renderStudio();
+    }
+
+    closeSaveCharacterModal();
+    renderSavedCharactersList();
+    showToast(`🎭 Saved Character "${newChar.name}"!`);
   }
+}
 
-  if (!state.savedCharacters) state.savedCharacters = [];
-  state.savedCharacters.push(newChar);
-  saveSavedCharactersToStorage();
-  renderSavedCharactersList();
-  closeSaveCharacterModal();
-  showToast(`🎭 Saved Character "${newChar.name}"!`);
+function syncCharacterToBlocks(charId) {
+  const char = getCharacterById(charId);
+  if (!char || !state.currentProject || !state.currentProject.blocks) return { updatedCount: 0, skippedCustomCount: 0 };
+
+  let updatedCount = 0;
+  let skippedCustomCount = 0;
+
+  state.currentProject.blocks.forEach((b, idx) => {
+    if (b.character_id === charId) {
+      if (b.is_custom_edited === true) {
+        skippedCustomCount++;
+        return; // PRESERVE CUSTOM EDITED SENTENCES!
+      }
+
+      b.voice_id = char.voice_id;
+      if (char.blend_weights) {
+        b.blend_weights = JSON.parse(JSON.stringify(char.blend_weights));
+      } else {
+        delete b.blend_weights;
+      }
+      b.speed = char.speed;
+      b.pause_after = char.pause_after;
+      b.pitch_shift = char.pitch_shift;
+      b.warmth = char.warmth;
+      b.clarity = char.clarity;
+      b.reverb = char.reverb;
+      b.fx_filter = char.fx_filter || (char.radio_fx ? "radio" : "none");
+      b.radio_fx = Boolean(char.radio_fx || char.fx_filter === "radio");
+
+      delete b.cachedAudioUrl;
+      delete b.cachedSig;
+      delete b.duration;
+
+      const row = document.querySelector(`[data-index="${idx}"]`);
+      if (row) {
+        row.classList.remove("ready", "playing");
+        const timeText = row.querySelector(".scrubber-time");
+        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+        const avatar = row.querySelector(".block-avatar");
+        if (avatar) {
+          avatar.style.backgroundColor = char.color || getVoiceById(char.voice_id).color;
+          avatar.textContent = char.badge || char.name.slice(0, 2).toUpperCase();
+        }
+      }
+      updatedCount++;
+    }
+  });
+
+  if (updatedCount > 0) {
+    renderStudio();
+    debouncedSave();
+  }
+  return { updatedCount, skippedCustomCount };
 }
 
 function applyCharacterToSelected(charId) {
-  const char = state.savedCharacters.find(c => c.id === charId);
+  const char = getCharacterById(charId);
   if (!char || !state.currentProject || !state.currentProject.blocks) return;
 
   const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
@@ -1764,6 +2135,8 @@ function applyCharacterToSelected(charId) {
     const b = state.currentProject.blocks[idx];
     if (!b) return;
 
+    b.character_id = char.id;
+    b.is_custom_edited = false;
     b.voice_id = char.voice_id;
     if (char.blend_weights) {
       b.blend_weights = JSON.parse(JSON.stringify(char.blend_weights));
@@ -1772,8 +2145,8 @@ function applyCharacterToSelected(charId) {
     }
 
     b.speed = char.speed;
-    b.gain = char.gain;
-    b.pause_after = char.pause_after;
+    b.gain = char.gain !== undefined ? char.gain : 1.0;
+    b.pause_after = char.pause_after !== undefined ? char.pause_after : 0.6;
     b.pitch_shift = char.pitch_shift;
     b.warmth = char.warmth;
     b.clarity = char.clarity;
@@ -1800,11 +2173,11 @@ function applyCharacterToSelected(charId) {
 
   renderStudio();
   debouncedSave();
-  showToast(`🎭 Applied Character "${char.name}" to ${spokenTargets.length} sentence${spokenTargets.length > 1 ? 's' : ''}!`);
+  showToast(`🎭 Assigned Character "${char.name}" to ${spokenTargets.length} sentence${spokenTargets.length > 1 ? 's' : ''}!`);
 }
 
 function updateCharacterWithCurrent(charId) {
-  const char = state.savedCharacters.find(c => c.id === charId);
+  const char = getCharacterById(charId);
   if (!char || !state.currentProject || !state.currentProject.blocks) return;
   const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
     ? state.activeBlockIndex
@@ -1832,12 +2205,113 @@ function updateCharacterWithCurrent(charId) {
   char.radio_fx = Boolean(activeBlock.radio_fx || activeBlock.fx_filter === "radio");
 
   saveSavedCharactersToStorage();
+  const syncRes = syncCharacterToBlocks(char.id);
   renderSavedCharactersList();
-  showToast(`✓ Updated Character "${char.name}" with current panel settings!`);
+  renderStudio();
+
+  let msg = `✓ Updated character "${char.name}"`;
+  if (syncRes.updatedCount > 0) {
+    msg += ` & synced to ${syncRes.updatedCount} sentence${syncRes.updatedCount > 1 ? 's' : ''}`;
+  }
+  if (syncRes.skippedCustomCount > 0) {
+    msg += ` (${syncRes.skippedCustomCount} custom-edited preserved)`;
+  }
+  showToast(msg + "!");
+}
+
+function revertActiveBlockToCharacter() {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : 0;
+  const b = state.currentProject.blocks[activeIdx];
+  if (!b || !b.character_id) return;
+
+  const char = getCharacterById(b.character_id);
+  if (!char) return;
+
+  recordHistory(`Revert to Character: ${char.name}`);
+
+  b.voice_id = char.voice_id;
+  if (char.blend_weights) {
+    b.blend_weights = JSON.parse(JSON.stringify(char.blend_weights));
+  } else {
+    delete b.blend_weights;
+  }
+  b.speed = char.speed;
+  b.gain = char.gain !== undefined ? char.gain : 1.0;
+  b.pause_after = char.pause_after !== undefined ? char.pause_after : 0.6;
+  b.pitch_shift = Number(char.pitch_shift || 0.0);
+  b.warmth = Number(char.warmth || 0.0);
+  b.clarity = Number(char.clarity || 0.0);
+  b.reverb = Number(char.reverb || 0.0);
+  b.fx_filter = char.fx_filter || (char.radio_fx ? "radio" : "none");
+  b.radio_fx = Boolean(char.radio_fx || char.fx_filter === "radio");
+  b.is_custom_edited = false;
+
+  delete b.cachedAudioUrl;
+  delete b.cachedSig;
+  delete b.duration;
+
+  renderStudio();
+  debouncedSave();
+  showToast(`↺ Reverted sentence to "${char.name}" character settings!`);
+}
+
+function updateActiveCharacterStatusBanner() {
+  const banner = document.getElementById("inspector-character-link-banner");
+  if (!banner) return;
+
+  if (!state.currentProject || !state.currentProject.blocks) {
+    banner.style.display = "none";
+    return;
+  }
+
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
+    ? state.activeBlockIndex
+    : 0;
+  const block = state.currentProject.blocks[activeIdx];
+  if (!block || block.type === "heading" || block.is_spoken === false || !block.character_id) {
+    banner.style.display = "none";
+    return;
+  }
+
+  const char = getCharacterById(block.character_id);
+  if (!char) {
+    banner.style.display = "none";
+    return;
+  }
+
+  banner.className = "character-status-banner";
+  banner.style.display = "flex";
+
+  if (block.is_custom_edited) {
+    banner.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-main);">
+        <span style="font-size: 14px;">🎭</span>
+        <span>Character: <strong>${escapeHtml(char.name)}</strong></span>
+        <span style="color: #f59e0b; font-weight: 600; font-size: 11px; background: rgba(245, 158, 11, 0.15); border-radius: 4px; padding: 1px 5px;">Customized</span>
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <button type="button" class="btn btn-secondary" onclick="revertActiveBlockToCharacter()" style="padding: 3px 8px; font-size: 11px; white-space: nowrap;" title="Revert sentence to original character settings">↺ Revert</button>
+      </div>
+    `;
+  } else {
+    banner.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-main);">
+        <span style="font-size: 14px;">🎭</span>
+        <span>Character: <strong>${escapeHtml(char.name)}</strong></span>
+        <span style="color: #10b981; font-weight: 600; font-size: 11px; background: rgba(16, 185, 129, 0.15); border-radius: 4px; padding: 1px 5px;">Synced</span>
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <button type="button" class="btn btn-secondary" onclick="openEditCharacterModal('${char.id}')" style="padding: 3px 8px; font-size: 11px;" title="Edit this character's voice & settings">✏️ Edit</button>
+      </div>
+    `;
+  }
 }
 
 function renameCharacter(charId) {
-  const char = state.savedCharacters.find(c => c.id === charId);
+  const char = getCharacterById(charId);
   if (!char) return;
   const newName = prompt(`Enter new name for character "${char.name}":`, char.name);
   if (newName && newName.trim() && newName.trim() !== char.name) {
@@ -1845,17 +2319,19 @@ function renameCharacter(charId) {
     char.badge = char.name.slice(0, 2).toUpperCase();
     saveSavedCharactersToStorage();
     renderSavedCharactersList();
+    renderStudio();
     showToast(`✓ Renamed to "${char.name}"`);
   }
 }
 
 function deleteCharacter(charId) {
-  const char = state.savedCharacters.find(c => c.id === charId);
+  const char = getCharacterById(charId);
   if (!char) return;
   if (confirm(`Delete character "${char.name}"?`)) {
     state.savedCharacters = state.savedCharacters.filter(c => c.id !== charId);
     saveSavedCharactersToStorage();
     renderSavedCharactersList();
+    renderStudio();
     showToast(`🗑️ Deleted character "${char.name}".`);
   }
 }
@@ -1974,6 +2450,9 @@ function handleSelectAudioFilter(filterName) {
     if (!b) return;
     b.fx_filter = targetFilter;
     b.radio_fx = (targetFilter === "radio");
+    if (b.character_id) {
+      b.is_custom_edited = true;
+    }
     delete b.cachedAudioUrl;
     delete b.cachedSig;
     const row = document.querySelector(`[data-index="${idx}"]`);
@@ -1987,6 +2466,7 @@ function handleSelectAudioFilter(filterName) {
   renderInspector();
   renderTimeline();
   debouncedSave();
+  updateActiveCharacterStatusBanner();
 
   const labels = {
     "none": "Clean Studio",
@@ -2396,11 +2876,18 @@ function renderInspector() {
   if (!block) return;
   const voice = getVoiceById(block.voice_id);
 
+  // Update Character Status Banner
+  updateActiveCharacterStatusBanner();
+
+  const char = getCharacterById(block.character_id);
+  const cardColor = (char && char.color) ? char.color : (voice.color || "#6366f1");
+  const cardBadge = (char && char.badge) ? char.badge : (voice.badge || (voice.id ? voice.id.slice(0, 2).toUpperCase() : "VO"));
+
   // Inspector voice card
   const avatar = document.getElementById("inspector-voice-avatar");
   if (avatar) {
-    avatar.style.backgroundColor = voice.color || "#6366f1";
-    avatar.textContent = voice.badge || (voice.id ? voice.id.slice(0, 2).toUpperCase() : "VO");
+    avatar.style.backgroundColor = cardColor;
+    avatar.textContent = cardBadge;
   }
 
   const nameEl = document.getElementById("inspector-voice-name");
@@ -2508,6 +2995,9 @@ function renderTimeline() {
     }
 
     const voice = getVoiceById(block.voice_id);
+    const char = getCharacterById(block.character_id);
+    const itemColor = (char && char.color) ? char.color : voice.color;
+    const charLabel = char ? `${char.name}${block.is_custom_edited ? ' (Custom)' : ''}` : voice.name;
     const item = document.createElement("div");
     const currentSig = getBlockSignature(block);
     const isReady = !!(block.cachedAudioUrl && block.cachedSig === currentSig);
@@ -2517,9 +3007,9 @@ function renderTimeline() {
     const isProcessing = row ? row.classList.contains("processing") : false;
 
     item.className = `timeline-block-item ${isReady ? "ready" : "pending"} ${isProcessing ? "processing" : ""} ${isActive ? "active" : ""} ${isPlaying ? "playing" : ""}`;
-    item.style.backgroundColor = voice.color;
+    item.style.backgroundColor = itemColor;
     item.textContent = block.text.slice(0, 25) + (block.text.length > 25 ? "..." : "");
-    item.title = `Sentence ${idx + 1} [${isReady ? 'Ready' : 'Draft'} • ${voice.name}]: ${block.text}`;
+    item.title = `Sentence ${idx + 1} [${isReady ? 'Ready' : 'Draft'} • ${charLabel}]: ${block.text}`;
 
     item.addEventListener("click", () => {
       selectBlock(idx);
@@ -3421,10 +3911,14 @@ function assignVoiceToTarget(voice) {
     } else {
       delete block.blend_weights;
     }
+    if (block.character_id) {
+      block.is_custom_edited = true;
+    }
   });
 
   renderStudio();
   debouncedSave();
+  updateActiveCharacterStatusBanner();
   closeVoiceDrawer();
   showToast(`✓ Applied voice "${voice.name}" to ${targets.length} sentence(s)!`);
 }
@@ -3970,6 +4464,9 @@ function setupEventListeners() {
       const block = state.currentProject.blocks[idx];
       if (!block) return;
       block.gain = gainVal;
+      if (block.character_id) {
+        block.is_custom_edited = true;
+      }
       delete block.cachedAudioUrl;
       delete block.cachedSig;
       const row = document.querySelector(`[data-index="${idx}"]`);
@@ -3981,6 +4478,7 @@ function setupEventListeners() {
     });
     renderTimeline();
     debouncedSave();
+    updateActiveCharacterStatusBanner();
   });
   document.getElementById("slider-volume")?.addEventListener("change", () => recordHistory("Adjust Volume"));
 
@@ -3997,6 +4495,9 @@ function setupEventListeners() {
       const block = state.currentProject.blocks[idx];
       if (!block) return;
       block.speed = val;
+      if (block.character_id) {
+        block.is_custom_edited = true;
+      }
       delete block.cachedAudioUrl;
       delete block.cachedSig;
       const row = document.querySelector(`[data-index="${idx}"]`);
@@ -4008,6 +4509,7 @@ function setupEventListeners() {
     });
     renderTimeline();
     debouncedSave();
+    updateActiveCharacterStatusBanner();
   });
   document.getElementById("slider-speed")?.addEventListener("change", () => recordHistory("Adjust Speed"));
 
@@ -4024,8 +4526,12 @@ function setupEventListeners() {
       const block = state.currentProject.blocks[idx];
       if (!block) return;
       block.pause_after = val;
+      if (block.character_id) {
+        block.is_custom_edited = true;
+      }
     });
     debouncedSave();
+    updateActiveCharacterStatusBanner();
   });
   document.getElementById("slider-pause")?.addEventListener("change", () => recordHistory("Adjust Pause"));
 
@@ -4042,6 +4548,9 @@ function setupEventListeners() {
       const block = state.currentProject.blocks[idx];
       if (!block) return;
       block.pitch_shift = val;
+      if (block.character_id) {
+        block.is_custom_edited = true;
+      }
       delete block.cachedAudioUrl;
       delete block.cachedSig;
       const row = document.querySelector(`[data-index="${idx}"]`);
@@ -4053,6 +4562,7 @@ function setupEventListeners() {
     });
     renderTimeline();
     debouncedSave();
+    updateActiveCharacterStatusBanner();
   });
   document.getElementById("slider-pitch")?.addEventListener("change", () => recordHistory("Adjust Pitch"));
 
@@ -4069,6 +4579,9 @@ function setupEventListeners() {
       const block = state.currentProject.blocks[idx];
       if (!block) return;
       block.warmth = val;
+      if (block.character_id) {
+        block.is_custom_edited = true;
+      }
       delete block.cachedAudioUrl;
       delete block.cachedSig;
       const row = document.querySelector(`[data-index="${idx}"]`);
@@ -4080,6 +4593,7 @@ function setupEventListeners() {
     });
     renderTimeline();
     debouncedSave();
+    updateActiveCharacterStatusBanner();
   });
   document.getElementById("slider-warmth")?.addEventListener("change", () => recordHistory("Adjust Warmth"));
 
@@ -4096,6 +4610,9 @@ function setupEventListeners() {
       const block = state.currentProject.blocks[idx];
       if (!block) return;
       block.clarity = val;
+      if (block.character_id) {
+        block.is_custom_edited = true;
+      }
       delete block.cachedAudioUrl;
       delete block.cachedSig;
       const row = document.querySelector(`[data-index="${idx}"]`);
@@ -4107,6 +4624,7 @@ function setupEventListeners() {
     });
     renderTimeline();
     debouncedSave();
+    updateActiveCharacterStatusBanner();
   });
   document.getElementById("slider-clarity")?.addEventListener("change", () => recordHistory("Adjust Clarity"));
 
@@ -4124,6 +4642,9 @@ function setupEventListeners() {
       const block = state.currentProject.blocks[idx];
       if (!block) return;
       block.reverb = revRatio;
+      if (block.character_id) {
+        block.is_custom_edited = true;
+      }
       delete block.cachedAudioUrl;
       delete block.cachedSig;
       const row = document.querySelector(`[data-index="${idx}"]`);
@@ -4135,8 +4656,60 @@ function setupEventListeners() {
     });
     renderTimeline();
     debouncedSave();
+    updateActiveCharacterStatusBanner();
   });
   document.getElementById("slider-reverb")?.addEventListener("change", () => recordHistory("Adjust Reverb"));
+
+  // Character Modal Voice Select
+  document.getElementById("char-modal-voice-select")?.addEventListener("change", (e) => {
+    updateCharModalVoiceDetails(e.target.value);
+  });
+
+  // Character Modal Name Input live preview
+  document.getElementById("char-modal-name-input")?.addEventListener("input", (e) => {
+    const val = e.target.value.trim();
+    const avatar = document.getElementById("char-modal-avatar-preview");
+    if (avatar) {
+      avatar.textContent = val ? val.slice(0, 2).toUpperCase() : "CH";
+    }
+  });
+
+  // Character Modal Sliders live label updates
+  document.getElementById("char-slider-speed")?.addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    const label = document.getElementById("char-val-speed");
+    if (label) label.textContent = val.toFixed(2) + "x";
+  });
+
+  document.getElementById("char-slider-pause")?.addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    const label = document.getElementById("char-val-pause");
+    if (label) label.textContent = val.toFixed(1) + "s";
+  });
+
+  document.getElementById("char-slider-pitch")?.addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    const label = document.getElementById("char-val-pitch");
+    if (label) label.textContent = (val > 0 ? `+${val.toFixed(1)}` : val.toFixed(1)) + " st";
+  });
+
+  document.getElementById("char-slider-warmth")?.addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    const label = document.getElementById("char-val-warmth");
+    if (label) label.textContent = (val > 0 ? `+${val.toFixed(1)}` : val.toFixed(1)) + " dB";
+  });
+
+  document.getElementById("char-slider-clarity")?.addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    const label = document.getElementById("char-val-clarity");
+    if (label) label.textContent = (val > 0 ? `+${val.toFixed(1)}` : val.toFixed(1)) + " dB";
+  });
+
+  document.getElementById("char-slider-reverb")?.addEventListener("input", (e) => {
+    const val = parseInt(e.target.value, 10);
+    const label = document.getElementById("char-val-reverb");
+    if (label) label.textContent = val + "%";
+  });
 
   // Drawer Search, Sort & Filters
   document.getElementById("drawer-search")?.addEventListener("input", (e) => {
@@ -4713,9 +5286,13 @@ function resetDspToNeutral() {
     b.warmth = 0.0;
     b.clarity = 0.0;
     b.reverb = 0.0;
+    if (b.character_id) {
+      b.is_custom_edited = true;
+    }
   });
   renderInspector();
   debouncedSave();
+  updateActiveCharacterStatusBanner();
   recordHistory("Reset Tone to Neutral");
   showToast("↺ Voice tone reset to neutral");
 }
@@ -4723,5 +5300,11 @@ function resetDspToNeutral() {
 window.switchInspectorTab = switchInspectorTab;
 window.toggleInspectorCollapse = toggleInspectorCollapse;
 window.resetDspToNeutral = resetDspToNeutral;
+window.openEditCharacterModal = openEditCharacterModal;
+window.handleApplyVoiceAndSettingsToSelected = handleApplyVoiceAndSettingsToSelected;
+window.revertActiveBlockToCharacter = revertActiveBlockToCharacter;
+window.pullActiveSentenceToCharModal = pullActiveSentenceToCharModal;
+window.selectCharModalFilter = selectCharModalFilter;
+window.updateActiveCharacterStatusBanner = updateActiveCharacterStatusBanner;
 
 
