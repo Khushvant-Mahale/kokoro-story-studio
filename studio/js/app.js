@@ -1058,15 +1058,9 @@ function updateSelectionUI() {
     btnDelete.textContent = `🗑️ Delete (${count})`;
   }
 
-  const btnMoveUp = document.getElementById("btn-move-block-up");
-  const btnMoveDown = document.getElementById("btn-move-block-down");
-  if (btnMoveUp) {
-    btnMoveUp.textContent = count > 1 ? `⬆ Move Up (${count})` : "⬆ Move Up";
-    btnMoveUp.title = `Move ${count > 1 ? `${count} selected sentences` : 'sentence'} up (Alt+↑)`;
-  }
-  if (btnMoveDown) {
-    btnMoveDown.textContent = count > 1 ? `⬇ Move Down (${count})` : "⬇ Move Down";
-    btnMoveDown.title = `Move ${count > 1 ? `${count} selected sentences` : 'sentence'} down (Alt+↓)`;
+  const btnSelectAll = document.getElementById("btn-toggle-select-all");
+  if (btnSelectAll) {
+    btnSelectAll.title = allSelected ? "Deselect all sentences in this story" : (count > 1 ? `Select all (${total}) sentences` : "Select all sentences in this story");
   }
 
   // Update Apply to Selected inspector buttons

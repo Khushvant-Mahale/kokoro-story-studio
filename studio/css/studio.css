@@ -1618,6 +1618,51 @@ input[type="range"]::-webkit-slider-thumb {
   color: #fff;
 }
 
+/* Upperbar icon-only buttons with smooth hover text expansion */
+.action-pill-btn.icon-hover-btn {
+  padding: 5px 9px;
+  gap: 0;
+  min-width: 32px;
+  justify-content: center;
+  transition: padding 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.15s ease,
+              border-color 0.15s ease,
+              color 0.15s ease;
+}
+
+.action-pill-btn.icon-hover-btn .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.action-pill-btn.icon-hover-btn .btn-hover-text {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  margin-left: 0;
+  display: inline-block;
+  vertical-align: middle;
+  pointer-events: none;
+  transition: max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              margin-left 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.action-pill-btn.icon-hover-btn:hover {
+  padding: 5px 12px;
+}
+
+.action-pill-btn.icon-hover-btn:hover .btn-hover-text,
+.action-pill-btn.icon-hover-btn:focus-visible .btn-hover-text {
+  max-width: 170px;
+  opacity: 1;
+  margin-left: 6px;
+}
+
 .selection-count-pill {
   font-size: 12px;
   font-weight: 700;
@@ -1782,6 +1827,42 @@ input[type="range"]::-webkit-slider-thumb {
   opacity: 0.35;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+.undo-split-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.undo-split-wrapper .undo-btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.undo-split-wrapper .history-caret-btn {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding: 4px 7px;
+  font-size: 11px;
+  min-width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-left: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.undo-split-wrapper .history-caret-btn:hover {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: var(--primary);
+  color: #fff;
 }
 
 .btn-text-sm {
@@ -2464,4 +2545,29 @@ input[type="range"]::-webkit-slider-thumb {
   color: #fff;
   transform: translateY(-1px);
 }
+
+/* Block hover-only actions: Reorder (▲/▼) and Insertion (+/🎬) buttons */
+.block-row .order-btn,
+.block-row .insert-block-btn,
+.scene-divider-row .order-btn,
+.scene-divider-row .insert-block-btn {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.92);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.block-row:hover .order-btn,
+.block-row:hover .insert-block-btn,
+.block-row:focus-within .order-btn,
+.block-row:focus-within .insert-block-btn,
+.scene-divider-row:hover .order-btn,
+.scene-divider-row:hover .insert-block-btn,
+.scene-divider-row:focus-within .order-btn,
+.scene-divider-row:focus-within .insert-block-btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
 
