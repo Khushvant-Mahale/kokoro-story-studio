@@ -332,8 +332,9 @@ async def handle_get_audio(request):
                 "Accept-Ranges": "bytes",
                 "Cache-Control": "public, max-age=31536000, immutable"
             }
-            if p.suffix == ".zip":
-                headers["Content-Disposition"] = f'attachment; filename="{p.name}"'
+            if p.suffix == ".zip" or request.query.get("download") == "1":
+                dl_name = request.query.get("filename") or p.name
+                headers["Content-Disposition"] = f'attachment; filename="{dl_name}"'
             return web.FileResponse(p, headers=headers)
 
     return web.Response(text="Audio file not found", status=404)

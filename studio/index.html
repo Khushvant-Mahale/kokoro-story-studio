@@ -153,8 +153,74 @@
           <button class="btn batch-btn" id="btn-batch-generate" onclick="toggleBatchRender()" title="Render all sentences into audio cache">⚡ Render All</button>
         </div>
         <button class="btn btn-secondary" id="btn-import-story" onclick="openImportModal()">📄 Import Text</button>
-        <button class="btn btn-secondary" id="btn-export-zip" onclick="exportZipAudio()" title="Export all sentences as individual numbered audio files in a ZIP archive">📦 Export Audio (ZIP)</button>
-        <button class="btn btn-primary" id="btn-export-master" onclick="exportMasterAudio()">🎬 Export Master WAV</button>
+        
+        <!-- UNIFIED EXPORT DROPDOWN -->
+        <div class="export-dropdown-wrapper" id="export-dropdown-wrapper">
+          <button class="btn btn-primary export-main-btn" id="btn-export-dropdown" onclick="toggleExportDropdown(event)" title="Export Story Audio Options">
+            <span>🎬 Export</span>
+            <span class="dropdown-caret">▾</span>
+          </button>
+          <div class="export-dropdown-menu" id="export-dropdown-menu" style="display: none;">
+            <div class="export-menu-header">
+              <span class="export-menu-heading">Audio Export</span>
+              <span class="export-menu-tag" id="export-menu-scope-tag">1 Selected</span>
+            </div>
+
+            <!-- DYNAMIC SELECTED AUDIO ITEM -->
+            <div class="export-menu-section-label">SELECTED AUDIO</div>
+            <button class="export-menu-item" id="export-item-selected" onclick="handleExportSelectedFromMenu(event)">
+              <div class="export-item-icon-box" id="export-item-selected-icon">🎵</div>
+              <div class="export-item-details">
+                <div class="export-item-title-row">
+                  <span class="export-item-title" id="export-item-selected-title">Export Selected Sentence (.wav)</span>
+                  <span class="export-item-badge" id="export-item-selected-badge">WAV</span>
+                </div>
+                <div class="export-item-desc" id="export-item-selected-desc">Download single sentence audio file directly</div>
+              </div>
+            </button>
+
+            <div class="export-menu-divider"></div>
+
+            <!-- FULL STORY AUDIO -->
+            <div class="export-menu-section-label">ENTIRE STORY AUDIO</div>
+            <button class="export-menu-item" id="export-item-master" onclick="handleExportMasterFromMenu(event)">
+              <div class="export-item-icon-box master-icon">🎬</div>
+              <div class="export-item-details">
+                <div class="export-item-title-row">
+                  <span class="export-item-title">Master Audio Track (.wav)</span>
+                  <span class="export-item-badge purple">MASTER</span>
+                </div>
+                <div class="export-item-desc">Stitched full audio with natural breath gaps & pacing</div>
+              </div>
+            </button>
+
+            <button class="export-menu-item" id="export-item-all-zip" onclick="handleExportZipFromMenu(event)">
+              <div class="export-item-icon-box zip-icon">📦</div>
+              <div class="export-item-details">
+                <div class="export-item-title-row">
+                  <span class="export-item-title">All Sentences (.zip)</span>
+                  <span class="export-item-badge blue">ZIP</span>
+                </div>
+                <div class="export-item-desc">All sentences as separate numbered audio files</div>
+              </div>
+            </button>
+
+            <div class="export-menu-divider"></div>
+
+            <!-- BACKUP / PROJECT DATA -->
+            <div class="export-menu-section-label">PROJECT DATA</div>
+            <button class="export-menu-item" id="export-item-json" onclick="handleExportProjectJson(event)">
+              <div class="export-item-icon-box json-icon">📄</div>
+              <div class="export-item-details">
+                <div class="export-item-title-row">
+                  <span class="export-item-title">Project Manuscript (.json)</span>
+                  <span class="export-item-badge green">JSON</span>
+                </div>
+                <div class="export-item-desc">Backup story blocks, characters, tone, and timeline settings</div>
+              </div>
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -457,6 +523,9 @@
             </button>
             <button class="action-pill-btn" id="btn-bulk-render" onclick="handleBulkRender()" title="Render only selected sentences sequentially" style="display: none;">
               ⚡ Render
+            </button>
+            <button class="action-pill-btn" id="btn-bulk-export" onclick="exportSelectedAudio()" title="Export selected audio (single sentence as WAV, multiple as ZIP)" style="display: none;">
+              📦 Export
             </button>
             <button class="action-pill-btn danger" id="btn-bulk-delete" onclick="handleBulkDelete()" title="Delete selected sentences" style="display: none;">
               🗑️ Delete
@@ -854,6 +923,6 @@
   </div>
 
   <div id="studio-toast" class="studio-toast"></div>
-  <script src="/studio/js/app.js?v=479"></script>
+  <script src="/studio/js/app.js?v=480"></script>
 </body>
 </html>

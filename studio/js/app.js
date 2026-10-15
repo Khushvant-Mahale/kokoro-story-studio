@@ -1424,6 +1424,24 @@ function updateSelectionUI() {
     btnDelete.textContent = `🗑️ Delete (${count})`;
   }
 
+  const btnExport = document.getElementById("btn-bulk-export");
+  if (btnExport) {
+    if (count === 1) {
+      btnExport.style.display = "inline-flex";
+      btnExport.innerHTML = `🎵 Export WAV`;
+      btnExport.title = "Export selected sentence as WAV audio file";
+    } else if (count > 1) {
+      btnExport.style.display = "inline-flex";
+      btnExport.innerHTML = `📦 Export ZIP (${count})`;
+      btnExport.title = `Export ${count} selected sentences into a ZIP archive`;
+    } else {
+      btnExport.style.display = "none";
+    }
+  }
+
+  // Update dynamic options inside unified export dropdown
+  updateExportDropdownUI();
+
   const btnSelectAll = document.getElementById("btn-toggle-select-all");
   if (btnSelectAll) {
     btnSelectAll.title = allSelected ? "Deselect all sentences in this story" : (count > 1 ? `Select all (${total}) sentences` : "Select all sentences in this story");
@@ -4673,16 +4691,269 @@ async function handleCopyColabScript() {
   }
 }
 
-// ---------------- MASTER EXPORT ---------------- //
+// ---------------- UNIFIED EXPORT SYSTEM ---------------- //
+
+function toggleExportDropdown(e) {
+  if (e) e.stopPropagation();
+  const wrapper = document.getElementById("export-dropdown-wrapper");
+  const menu = document.getElementById("export-dropdown-menu");
+  if (!menu) return;
+
+  const isHidden = (menu.style.display === "none" || !menu.style.display);
+  menu.style.display = isHidden ? "flex" : "none";
+  if (wrapper) wrapper.classList.toggle("open", isHidden);
+
+  if (isHidden) {
+    updateExportDropdownUI();
+    if (typeof closeHistoryDropdown === "function") {
+      closeHistoryDropdown();
+    }
+  }
+}
+
+function closeExportDropdown() {
+  const wrapper = document.getElementById("export-dropdown-wrapper");
+  const menu = document.getElementById("export-dropdown-menu");
+  if (menu) menu.style.display = "none";
+  if (wrapper) wrapper.classList.remove("open");
+}
+
+function updateExportDropdownUI() {
+  const scopeTag = document.getElementById("export-menu-scope-tag");
+  const itemSelected = document.getElementById("export-item-selected");
+  const itemIcon = document.getElementById("export-item-selected-icon");
+  const itemTitle = document.getElementById("export-item-selected-title");
+  const itemBadge = document.getElementById("export-item-selected-badge");
+  const itemDesc = document.getElementById("export-item-selected-desc");
+
+  if (!itemSelected) return;
+
+  const count = state.selectedBlockIndices ? state.selectedBlockIndices.size : 0;
+
+  if (count === 1) {
+    const idx = Array.from(state.selectedBlockIndices)[0];
+    const block = state.currentProject?.blocks ? state.currentProject.blocks[idx] : null;
+    let snippet = "";
+    if (block && block.text) {
+      snippet = block.text.trim();
+      if (snippet.length > 24) snippet = snippet.slice(0, 23) + "…";
+      snippet = ` ("${snippet}")`;
+    }
+
+    if (scopeTag) scopeTag.textContent = `Sentence #${idx + 1}`;
+    if (itemIcon) itemIcon.textContent = "🎵";
+    if (itemTitle) itemTitle.textContent = `Export Selected Sentence (.wav)`;
+    if (itemBadge) {
+      itemBadge.textContent = "WAV";
+      itemBadge.className = "export-item-badge purple";
+    }
+    if (itemDesc) itemDesc.textContent = `Download direct audio file for Sentence #${idx + 1}${snippet}`;
+    itemSelected.classList.remove("disabled");
+    itemSelected.title = `Export audio file for Sentence #${idx + 1}`;
+  } else if (count > 1) {
+    if (scopeTag) scopeTag.textContent = `${count} Selected`;
+    if (itemIcon) itemIcon.textContent = "📦";
+    if (itemTitle) itemTitle.textContent = `Export Selected Sentences (.zip)`;
+    if (itemBadge) {
+      itemBadge.textContent = `ZIP (${count})`;
+      itemBadge.className = "export-item-badge blue";
+    }
+    if (itemDesc) itemDesc.textContent = `Package ${count} selected sentences as separate audio files in a ZIP`;
+    itemSelected.classList.remove("disabled");
+    itemSelected.title = `Export ${count} selected sentences into a ZIP archive`;
+  } else {
+    if (scopeTag) scopeTag.textContent = `0 Selected`;
+    if (itemIcon) itemIcon.textContent = "🎯";
+    if (itemTitle) itemTitle.textContent = `Export Selected Audio`;
+    if (itemBadge) {
+      itemBadge.textContent = "SELECT";
+      itemBadge.className = "export-item-badge";
+    }
+    if (itemDesc) itemDesc.textContent = `Check sentence checkboxes in canvas to export selection`;
+    itemSelected.classList.add("disabled");
+    itemSelected.title = `Select one or more sentence checkboxes to export selection`;
+  }
+}
+
+async function exportSelectedAudio() {
+  if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) {
+    showToast("⚠️ Project has no sentences to export.");
+    return;
+  }
+
+  const selectedIndices = Array.from(state.selectedBlockIndices || []).sort((a, b) => a - b);
+  if (selectedIndices.length === 0) {
+    showToast("⚠️ Please select one or more sentences to export.");
+    return;
+  }
+
+  const titleSlug = (state.currentProject.title || "story")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "story";
+
+  const exportTriggerBtn = document.getElementById("btn-export-dropdown");
+
+  // CASE 1: Single sentence selected -> Export directly as .wav file
+  if (selectedIndices.length === 1) {
+    const idx = selectedIndices[0];
+    const block = state.currentProject.blocks[idx];
+    if (!block) return;
+
+    if (block.type === "heading" || block.is_spoken === false) {
+      showToast("⚠️ Scene headings have no audio to export.");
+      return;
+    }
+
+    if (exportTriggerBtn) {
+      exportTriggerBtn.innerHTML = `<span>⏳ Synthesizing...</span> <span class="dropdown-caret">▾</span>`;
+      exportTriggerBtn.disabled = true;
+    }
+
+    // Check if rendered, if not synthesize on demand
+    let audioUrl = block.cachedAudioUrl;
+    if (!audioUrl) {
+      showToast(`⚡ Rendering audio for sentence #${idx + 1}...`);
+      try {
+        const res = await fetch("/api/synthesize_block", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: block.text,
+            voice_id: block.voice_id,
+            blend_weights: block.blend_weights,
+            speed: block.speed || 0.90,
+            gain: block.gain || 1.0,
+            pitch_shift: block.pitch_shift || 0.0,
+            warmth: block.warmth || 0.0,
+            clarity: block.clarity || 0.0,
+            reverb: block.reverb || 0.0,
+            radio_fx: Boolean(block.radio_fx),
+            fx_filter: block.fx_filter || (block.radio_fx ? "radio" : "none")
+          })
+        });
+        const data = await res.json();
+        if (data.audio_url) {
+          block.cachedAudioUrl = data.audio_url;
+          block.duration = data.duration;
+          audioUrl = data.audio_url;
+          debouncedSave();
+          renderTimeline();
+          const row = document.querySelector(`[data-index="${idx}"]`);
+          if (row) {
+            row.classList.add("ready");
+            const timeText = row.querySelector(".scrubber-time");
+            if (timeText) timeText.textContent = `${data.duration.toFixed(1)}s`;
+          }
+        } else {
+          throw new Error(data.error || "Synthesis returned no audio URL");
+        }
+      } catch (err) {
+        showToast("❌ Synthesis failed: " + err.message);
+        if (exportTriggerBtn) {
+          exportTriggerBtn.innerHTML = `<span>🎬 Export</span> <span class="dropdown-caret">▾</span>`;
+          exportTriggerBtn.disabled = false;
+        }
+        return;
+      }
+    }
+
+    const cleanSnippet = (block.text || "")
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 4)
+      .join("_")
+      .toLowerCase();
+    const downloadFilename = `${titleSlug}_sentence_${String(idx + 1).padStart(2, "0")}${cleanSnippet ? "_" + cleanSnippet : ""}.wav`;
+
+    showToast(`⏳ Downloading Sentence #${idx + 1}...`);
+    try {
+      const res = await fetch(`${audioUrl}?download=1&filename=${encodeURIComponent(downloadFilename)}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = downloadFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      showToast(`✓ Exported: ${downloadFilename}`);
+    } catch (err) {
+      const a = document.createElement("a");
+      a.href = `${audioUrl}?download=1&filename=${encodeURIComponent(downloadFilename)}`;
+      a.download = downloadFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast(`✓ Downloading ${downloadFilename}`);
+    } finally {
+      if (exportTriggerBtn) {
+        exportTriggerBtn.innerHTML = `<span>🎬 Export</span> <span class="dropdown-caret">▾</span>`;
+        exportTriggerBtn.disabled = false;
+      }
+    }
+    return;
+  }
+
+  // CASE 2: Multiple sentences selected -> Export as .zip archive
+  const selectedBlocks = selectedIndices
+    .map(i => state.currentProject.blocks[i])
+    .filter(b => b && b.text && b.text.trim() && b.type !== "heading" && b.is_spoken !== false);
+
+  if (selectedBlocks.length === 0) {
+    showToast("⚠️ None of the selected items are spoken sentences.");
+    return;
+  }
+
+  const zipFilename = `${titleSlug}_selected_${selectedBlocks.length}_sentences.zip`;
+  showToast(`📦 Packaging ${selectedBlocks.length} selected sentences into ZIP...`);
+
+  if (exportTriggerBtn) {
+    exportTriggerBtn.innerHTML = `<span>⏳ Packaging (${selectedBlocks.length})...</span> <span class="dropdown-caret">▾</span>`;
+    exportTriggerBtn.disabled = true;
+  }
+
+  try {
+    const res = await fetch("/api/export_zip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        blocks: selectedBlocks,
+        filename: zipFilename
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      showToast("❌ ZIP export failed: " + data.error);
+    } else if (data.zip_url) {
+      const a = document.createElement("a");
+      a.href = `${data.zip_url}?download=1&filename=${encodeURIComponent(zipFilename)}`;
+      a.download = data.filename || zipFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast(`📦 Exported ZIP with ${data.file_count || selectedBlocks.length} selected sentences!`);
+    }
+  } catch (err) {
+    showToast("❌ Export failed: " + err.message);
+  } finally {
+    if (exportTriggerBtn) {
+      exportTriggerBtn.innerHTML = `<span>🎬 Export</span> <span class="dropdown-caret">▾</span>`;
+      exportTriggerBtn.disabled = false;
+    }
+  }
+}
 
 async function exportMasterAudio() {
-  const exportBtn = document.getElementById("btn-export-master");
+  const exportBtn = document.getElementById("btn-export-dropdown");
   if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) {
     showToast("⚠️ Project has no sentences to export.");
     return;
   }
   if (exportBtn) {
-    exportBtn.textContent = "⏳ Stitching Master Track...";
+    exportBtn.innerHTML = `<span>⏳ Stitching Master...</span> <span class="dropdown-caret">▾</span>`;
     exportBtn.disabled = true;
   }
 
@@ -4703,15 +4974,15 @@ async function exportMasterAudio() {
       return;
     }
     if (data.master_url) {
-      if (exportBtn) exportBtn.textContent = "✓ Master Ready!";
       state.storyAudioPlayer.src = `${data.master_url}?t=${Date.now()}`;
       state.storyAudioPlayer.play().catch(() => {});
 
-      // Download
       const a = document.createElement("a");
-      a.href = data.master_url;
+      a.href = `${data.master_url}?download=1&filename=${encodeURIComponent(data.filename || filename)}`;
       a.download = data.filename || filename;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       showToast("🎬 Master WAV compiled and download started!");
     }
   } catch (err) {
@@ -4719,10 +4990,10 @@ async function exportMasterAudio() {
   } finally {
     setTimeout(() => {
       if (exportBtn) {
-        exportBtn.textContent = "🎬 Export Master WAV";
+        exportBtn.innerHTML = `<span>🎬 Export</span> <span class="dropdown-caret">▾</span>`;
         exportBtn.disabled = false;
       }
-    }, 2500);
+    }, 2000);
   }
 }
 
@@ -4732,9 +5003,9 @@ async function exportZipAudio() {
     return;
   }
 
-  const exportBtn = document.getElementById("btn-export-zip");
+  const exportBtn = document.getElementById("btn-export-dropdown");
   if (exportBtn) {
-    exportBtn.textContent = "⏳ Packaging ZIP...";
+    exportBtn.innerHTML = `<span>⏳ Packaging All ZIP...</span> <span class="dropdown-caret">▾</span>`;
     exportBtn.disabled = true;
   }
 
@@ -4745,7 +5016,7 @@ async function exportZipAudio() {
       .replace(/^_+|_+$/g, "") || "story";
     const filename = `${titleSlug}_sentences.zip`;
 
-    showToast("📦 Packaging individual sentence audio files into ZIP...");
+    showToast("📦 Packaging all sentence audio files into ZIP...");
 
     const res = await fetch("/api/export_zip", {
       method: "POST",
@@ -4760,11 +5031,12 @@ async function exportZipAudio() {
     if (data.error) {
       showToast("❌ ZIP export failed: " + data.error);
     } else if (data.zip_url) {
-      if (exportBtn) exportBtn.textContent = "✓ ZIP Ready!";
       const a = document.createElement("a");
-      a.href = data.zip_url;
+      a.href = `${data.zip_url}?download=1&filename=${encodeURIComponent(filename)}`;
       a.download = data.filename || filename;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       showToast(`📦 Downloaded ZIP with ${data.file_count} individual sentence audio files!`);
     }
   } catch (err) {
@@ -4772,10 +5044,57 @@ async function exportZipAudio() {
   } finally {
     setTimeout(() => {
       if (exportBtn) {
-        exportBtn.textContent = "📦 Export Audio (ZIP)";
+        exportBtn.innerHTML = `<span>🎬 Export</span> <span class="dropdown-caret">▾</span>`;
         exportBtn.disabled = false;
       }
-    }, 2500);
+    }, 2000);
+  }
+}
+
+function handleExportSelectedFromMenu(e) {
+  if (e) e.stopPropagation();
+  closeExportDropdown();
+  exportSelectedAudio();
+}
+
+function handleExportMasterFromMenu(e) {
+  if (e) e.stopPropagation();
+  closeExportDropdown();
+  exportMasterAudio();
+}
+
+function handleExportZipFromMenu(e) {
+  if (e) e.stopPropagation();
+  closeExportDropdown();
+  exportZipAudio();
+}
+
+function handleExportProjectJson(e) {
+  if (e) e.stopPropagation();
+  closeExportDropdown();
+  if (!state.currentProject) {
+    showToast("⚠️ No project open to export.");
+    return;
+  }
+  try {
+    const titleSlug = (state.currentProject.title || "story")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "story";
+    const filename = `${titleSlug}_backup.json`;
+    const jsonStr = JSON.stringify(state.currentProject, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showToast(`✓ Exported project JSON: ${filename}`);
+  } catch (err) {
+    showToast("❌ Failed to export project JSON: " + err.message);
   }
 }
 
@@ -5204,10 +5523,13 @@ function setupEventListeners() {
     }
   });
 
-  // Close History dropdown on click outside
+  // Close dropdowns on click outside
   document.addEventListener("click", (e) => {
     if (!e.target.closest("#history-dropdown-wrapper")) {
       closeHistoryDropdown();
+    }
+    if (!e.target.closest("#export-dropdown-wrapper")) {
+      closeExportDropdown();
     }
   });
 
@@ -5959,5 +6281,13 @@ window.loadSampleStoryIntoProject = loadSampleStoryIntoProject;
 window.toggleDashboardPreview = toggleDashboardPreview;
 window.handleDuplicateProject = handleDuplicateProject;
 window.handleRenameProject = handleRenameProject;
+window.toggleExportDropdown = toggleExportDropdown;
+window.closeExportDropdown = closeExportDropdown;
+window.updateExportDropdownUI = updateExportDropdownUI;
+window.exportSelectedAudio = exportSelectedAudio;
+window.handleExportSelectedFromMenu = handleExportSelectedFromMenu;
+window.handleExportMasterFromMenu = handleExportMasterFromMenu;
+window.handleExportZipFromMenu = handleExportZipFromMenu;
+window.handleExportProjectJson = handleExportProjectJson;
 
 
