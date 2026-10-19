@@ -499,6 +499,8 @@ class ProjectManager:
                     preview_audio = next((b.get("cachedAudioUrl") for b in blocks if b.get("cachedAudioUrl")), None)
                     master_file = data.get("master_filename")
                     master_exists = bool(master_file and (OUTPUT_DIR / master_file).exists())
+                    chars = data.get("characters", [])
+                    char_count = len(chars) if isinstance(chars, list) else 0
 
                     projects.append({
                         "id": data.get("id", p.stem),
@@ -508,6 +510,7 @@ class ProjectManager:
                         "total_duration": round(total_dur, 1),
                         "voices_used": voices_used[:5],
                         "voice_count": len(voices_used),
+                        "character_count": char_count,
                         "preview_audio": preview_audio,
                         "master_exists": master_exists,
                         "master_filename": master_file if master_exists else None,

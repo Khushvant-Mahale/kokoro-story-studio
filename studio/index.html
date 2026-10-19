@@ -405,9 +405,14 @@
                 <span class="section-label">Character Voices</span>
                 <span id="characters-count-badge" class="badge-mini" style="font-size: 10px;">0</span>
               </div>
-              <button type="button" class="action-pill-btn primary" id="btn-save-as-character" onclick="handleOpenSaveCharacterModal()" style="padding: 4px 8px; font-size: 11px;" title="Save current voice actor and all custom tone & DSP settings as a reusable Character">
-                💾 Save Current
-              </button>
+              <div style="display: flex; align-items: center; gap: 5px;">
+                <button type="button" class="action-pill-btn secondary" id="btn-import-cast" onclick="handleOpenImportCastModal()" style="padding: 4px 7px; font-size: 11px;" title="Import character cast from another project">
+                  📥 Import
+                </button>
+                <button type="button" class="action-pill-btn primary" id="btn-save-as-character" onclick="handleOpenSaveCharacterModal()" style="padding: 4px 8px; font-size: 11px;" title="Save current voice actor and all custom tone & DSP settings as a reusable Character">
+                  💾 Save Current
+                </button>
+              </div>
             </div>
 
             <div id="saved-characters-list" class="saved-characters-list">
@@ -917,6 +922,51 @@
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border-color);">
           <button type="button" class="btn btn-secondary" onclick="closeSaveCharacterModal()">Cancel</button>
           <button type="button" class="btn btn-primary" id="btn-save-character-confirm" onclick="confirmSaveCharacter()">💾 Save Character</button>
+        </div>
+      </div>
+  <!-- ================= IMPORT CHARACTER CAST MODAL ================= -->
+  <div class="drawer-backdrop" id="import-cast-modal" style="display: none;">
+    <div class="drawer-window" style="width: 480px; max-width: 95vw; max-height: 85vh; overflow-y: auto;">
+      <div class="drawer-header" style="position: sticky; top: 0; background: var(--bg-surface); z-index: 10;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">🎭</span>
+          <span class="drawer-title">Import Character Cast</span>
+        </div>
+        <button class="icon-btn" onclick="closeImportCastModal()" style="font-size: 18px;">✕</button>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.45;">
+          Copy saved character voices and settings from another story project into this project.
+        </div>
+
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px;">Source Story Project</label>
+          <select id="import-cast-source-select" class="search-input" style="padding: 8px 10px; font-size: 13px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: var(--radius-sm); width: 100%;" onchange="handleImportSourceProjectChange()">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <div id="import-cast-preview-container">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px;">Characters to Import</label>
+          <div id="import-cast-preview-list" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 10px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+            <!-- Previews -->
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 16px; font-size: 12px; color: var(--text-main); margin-top: 4px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="import-cast-mode" value="append" checked>
+            <span>Append to existing cast</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="import-cast-mode" value="replace">
+            <span>Replace current cast</span>
+          </label>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 14px;">
+          <button type="button" class="btn btn-secondary" onclick="closeImportCastModal()">Cancel</button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-import-cast" onclick="confirmImportCast()">📥 Import Cast</button>
         </div>
       </div>
     </div>

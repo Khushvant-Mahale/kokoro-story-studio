@@ -246,6 +246,7 @@ async def handle_create_project(request):
         "title": title,
         "default_voice": default_voice,
         "default_settings": defaults if defaults else None,
+        "characters": data.get("characters", []),
         "blocks": blocks,
         "master_filename": f"{proj_id}_master.wav"
     }

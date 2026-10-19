@@ -458,6 +458,7 @@ async function openProject(projectId, updateUrl = true) {
     state.undoStack = [];
     state.redoStack = [];
     updateUndoRedoUI();
+    loadSavedCharactersForCurrentProject();
     if (state.currentProject && state.currentProject.blocks) {
       state.currentProject.blocks.forEach(block => {
         const sig = getBlockSignature(block);
@@ -1919,93 +1920,81 @@ const CHARACTER_COLOR_PALETTE = [
 ];
 
 function loadSavedCharacters() {
+  loadSavedCharactersForCurrentProject();
+}
+
+function loadSavedCharactersForCurrentProject() {
+  if (!state.currentProject) {
+    state.savedCharacters = [];
+    renderSavedCharactersList();
+    return;
+  }
+
+  const projId = state.currentProject.id;
+
+  // 1. If current project object from server has a characters array, use it
+  if (Array.isArray(state.currentProject.characters) && state.currentProject.characters.length > 0) {
+    state.savedCharacters = state.currentProject.characters;
+    try {
+      localStorage.setItem(`kss_chars_${projId}`, JSON.stringify(state.savedCharacters));
+    } catch (e) {}
+    renderSavedCharactersList();
+    return;
+  }
+
+  // 2. Check project-specific localStorage cache
   try {
-    const raw = localStorage.getItem("kss_saved_characters");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        state.savedCharacters = parsed;
+    const rawProj = localStorage.getItem(`kss_chars_${projId}`);
+    if (rawProj) {
+      const parsedProj = JSON.parse(rawProj);
+      if (Array.isArray(parsedProj) && parsedProj.length > 0) {
+        state.savedCharacters = parsedProj;
+        state.currentProject.characters = state.savedCharacters;
+        debouncedSave();
+        renderSavedCharactersList();
         return;
       }
     }
   } catch (e) {
-    console.warn("Could not load saved characters from localStorage:", e);
+    console.warn("Could not load project-specific characters:", e);
   }
 
-  state.savedCharacters = [
-    {
-      id: "char_narrator",
-      name: "Narrator (Studio)",
-      voice_id: "blend_fenrir_onyx",
-      speed: 0.90,
-      gain: 1.0,
-      pause_after: 0.6,
-      pitch_shift: 0.0,
-      warmth: 0.0,
-      clarity: 0.0,
-      reverb: 0.0,
-      fx_filter: "none",
-      radio_fx: false,
-      color: "#6366f1",
-      badge: "NA"
-    },
-    {
-      id: "char_hero",
-      name: "Protagonist / Hero",
-      voice_id: "am_adam",
-      speed: 0.94,
-      gain: 1.0,
-      pause_after: 0.7,
-      pitch_shift: 0.5,
-      warmth: 1.0,
-      clarity: 1.5,
-      reverb: 0.0,
-      fx_filter: "none",
-      radio_fx: false,
-      color: "#3b82f6",
-      badge: "HE"
-    },
-    {
-      id: "char_sarah",
-      name: "Sarah (Heroine)",
-      voice_id: "af_sarah",
-      speed: 0.92,
-      gain: 1.0,
-      pause_after: 0.8,
-      pitch_shift: 1.0,
-      warmth: 0.5,
-      clarity: 2.0,
-      reverb: 0.05,
-      fx_filter: "none",
-      radio_fx: false,
-      color: "#ec4899",
-      badge: "SA"
-    },
-    {
-      id: "char_radio",
-      name: "Radio Dispatcher",
-      voice_id: "am_michael",
-      speed: 0.92,
-      gain: 1.0,
-      pause_after: 0.7,
-      pitch_shift: 0.0,
-      warmth: 0.0,
-      clarity: 1.5,
-      reverb: 0.0,
-      fx_filter: "radio",
-      radio_fx: true,
-      color: "#eab308",
-      badge: "RD"
-    }
-  ];
-  saveSavedCharactersToStorage();
+  // 3. One-time migration for existing project that had legacy global characters
+  // If proj_248b7cf9 is opened and has no characters, migrate legacy kss_saved_characters
+  if (projId === "proj_248b7cf9") {
+    try {
+      const legacyRaw = localStorage.getItem("kss_saved_characters");
+      if (legacyRaw) {
+        const legacy = JSON.parse(legacyRaw);
+        if (Array.isArray(legacy) && legacy.length > 0) {
+          state.savedCharacters = legacy;
+          state.currentProject.characters = state.savedCharacters;
+          saveSavedCharactersToStorage();
+          renderSavedCharactersList();
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 4. Any other project starts with its own clean empty character set
+  state.savedCharacters = [];
+  state.currentProject.characters = [];
+  renderSavedCharactersList();
 }
 
 function saveSavedCharactersToStorage() {
-  try {
-    localStorage.setItem("kss_saved_characters", JSON.stringify(state.savedCharacters));
-  } catch (e) {
-    console.warn("Could not save characters to localStorage:", e);
+  if (!state.savedCharacters) state.savedCharacters = [];
+
+  if (state.currentProject) {
+    state.currentProject.characters = state.savedCharacters;
+    const projId = state.currentProject.id;
+    try {
+      localStorage.setItem(`kss_chars_${projId}`, JSON.stringify(state.savedCharacters));
+    } catch (e) {
+      console.warn("Could not save characters to localStorage:", e);
+    }
+    debouncedSave();
   }
 }
 
@@ -2027,8 +2016,8 @@ function renderSavedCharactersList() {
   if (total === 0) {
     container.innerHTML = `
       <div class="saved-char-empty">
-        No character voices saved yet.<br>
-        <span style="font-size: 11px; opacity: 0.75;">Click "＋ Save Current" to save active voice & settings as a character.</span>
+        No character voices in this project cast.<br>
+        <span style="font-size: 11px; opacity: 0.75;">Click "＋ Save Current" to add active voice or click "📥 Import" to copy from another project.</span>
       </div>
     `;
     return;
@@ -2751,6 +2740,158 @@ function deleteCharacter(charId) {
     showToast(`🗑️ Deleted character "${char.name}".`);
   }
 }
+
+// ---------------- IMPORT CAST FROM OTHER PROJECT ---------------- //
+
+let pendingImportCharacters = [];
+let pendingImportProjectTitle = "";
+
+async function handleOpenImportCastModal() {
+  const modal = document.getElementById("import-cast-modal");
+  if (!modal) return;
+
+  if (!state.currentProject) {
+    showToast("⚠️ Open a story project first to import a character cast.");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/projects");
+    if (res.ok) {
+      state.projects = await res.json();
+    }
+  } catch (e) {}
+
+  const otherProjects = (state.projects || []).filter(p => p.id !== state.currentProject.id);
+  const select = document.getElementById("import-cast-source-select");
+  if (!select) return;
+
+  select.innerHTML = "";
+
+  if (otherProjects.length === 0) {
+    select.innerHTML = `<option value="">No other projects available</option>`;
+    renderImportCastPreview([]);
+    modal.style.display = "flex";
+    return;
+  }
+
+  otherProjects.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    const charCountText = (p.character_count !== undefined && p.character_count > 0) ? `(${p.character_count} characters)` : "";
+    opt.textContent = `${p.title} ${charCountText}`;
+    select.appendChild(opt);
+  });
+
+  modal.style.display = "flex";
+  handleImportSourceProjectChange();
+}
+
+function closeImportCastModal() {
+  const modal = document.getElementById("import-cast-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function handleImportSourceProjectChange() {
+  const select = document.getElementById("import-cast-source-select");
+  const sourceProjId = select ? select.value : null;
+  if (!sourceProjId) {
+    renderImportCastPreview([]);
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/project?id=${encodeURIComponent(sourceProjId)}&t=${Date.now()}`);
+    if (!res.ok) throw new Error("Could not fetch project");
+    const projData = await res.json();
+    pendingImportProjectTitle = projData.title || "Project";
+    let chars = Array.isArray(projData.characters) ? projData.characters : [];
+
+    if (chars.length === 0) {
+      try {
+        const rawLocal = localStorage.getItem(`kss_chars_${sourceProjId}`);
+        if (rawLocal) {
+          const parsed = JSON.parse(rawLocal);
+          if (Array.isArray(parsed)) chars = parsed;
+        }
+      } catch (e) {}
+    }
+
+    pendingImportCharacters = chars;
+    renderImportCastPreview(chars);
+  } catch (err) {
+    console.warn("Could not load project characters for preview:", err);
+    pendingImportCharacters = [];
+    renderImportCastPreview([]);
+  }
+}
+
+function renderImportCastPreview(chars) {
+  const listEl = document.getElementById("import-cast-preview-list");
+  const confirmBtn = document.getElementById("btn-confirm-import-cast");
+  if (!listEl) return;
+
+  listEl.innerHTML = "";
+  if (!chars || chars.length === 0) {
+    listEl.innerHTML = `<div style="font-size: 11.5px; color: var(--text-muted); text-align: center; padding: 12px;">This project has no saved characters.</div>`;
+    if (confirmBtn) confirmBtn.disabled = true;
+    return;
+  }
+
+  if (confirmBtn) confirmBtn.disabled = false;
+
+  chars.forEach(c => {
+    const row = document.createElement("div");
+    row.style.cssText = "display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 5px 8px; background: rgba(255,255,255,0.03); border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);";
+    const badge = c.badge || c.name.slice(0, 2).toUpperCase();
+    const filterTag = (c.fx_filter && c.fx_filter !== "none") ? ` [${c.fx_filter.toUpperCase()}]` : "";
+    const voiceObj = getVoiceById(c.voice_id);
+    row.innerHTML = `
+      <div style="background-color: ${c.color || '#6366f1'}; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0;">
+        ${escapeHtml(badge)}
+      </div>
+      <span style="font-weight: 600; color: var(--text-main);">${escapeHtml(c.name)}</span>
+      <span style="color: var(--text-muted); font-size: 11px;">(${escapeHtml(voiceObj.name)}${filterTag})</span>
+    `;
+    listEl.appendChild(row);
+  });
+}
+
+function confirmImportCast() {
+  if (!pendingImportCharacters || pendingImportCharacters.length === 0) {
+    showToast("⚠️ No characters to import from selected project.");
+    return;
+  }
+
+  const mode = document.querySelector('input[name="import-cast-mode"]:checked')?.value || "append";
+
+  if (!state.savedCharacters) state.savedCharacters = [];
+
+  if (mode === "replace") {
+    state.savedCharacters = JSON.parse(JSON.stringify(pendingImportCharacters));
+  } else {
+    const existingIds = new Set(state.savedCharacters.map(c => c.id));
+    pendingImportCharacters.forEach(c => {
+      const cloned = JSON.parse(JSON.stringify(c));
+      if (existingIds.has(cloned.id)) {
+        cloned.id = "char_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000);
+      }
+      state.savedCharacters.push(cloned);
+      existingIds.add(cloned.id);
+    });
+  }
+
+  saveSavedCharactersToStorage();
+  renderSavedCharactersList();
+  renderStudio();
+  closeImportCastModal();
+  showToast(`🎭 Imported ${pendingImportCharacters.length} character(s) from "${pendingImportProjectTitle}"!`);
+}
+
+window.handleOpenImportCastModal = handleOpenImportCastModal;
+window.closeImportCastModal = closeImportCastModal;
+window.handleImportSourceProjectChange = handleImportSourceProjectChange;
+window.confirmImportCast = confirmImportCast;
 
 function getProjectDefaultSettings() {
   let savedLocal = null;
