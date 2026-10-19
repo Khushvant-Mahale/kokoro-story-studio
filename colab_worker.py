@@ -34,7 +34,12 @@ import logging
 logging.getLogger("phonemizer").setLevel(logging.ERROR)
 
 def run_cmd(cmd):
-    return subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    if res.returncode != 0 and res.stderr:
+        err_lines = [l.strip() for l in res.stderr.splitlines() if l.strip() and "root user" not in l and "deprecated" not in l]
+        if err_lines:
+            print(f"  ℹ️ {err_lines[-1]}")
+    return res
 
 # Check CUDA / GPU
 try:
@@ -65,17 +70,25 @@ if needs_install:
     print("📦 Setting up libraries with GPU CUDA support...")
     if has_cuda:
         run_cmd(f"{sys.executable} -m pip uninstall -y -q onnxruntime onnxruntime-gpu")
-        run_cmd(f"{sys.executable} -m pip install -q --no-cache-dir onnxruntime-gpu==1.19.2")
+        # Install onnxruntime-gpu (supports Python 3.10 - 3.13+)
+        res = run_cmd(f"{sys.executable} -m pip install -q --no-cache-dir onnxruntime-gpu")
+        if res.returncode != 0:
+            print("⚠️ onnxruntime-gpu direct install failed, falling back to CPU onnxruntime...")
+            run_cmd(f"{sys.executable} -m pip install -q onnxruntime")
     else:
         run_cmd(f"{sys.executable} -m pip install -q onnxruntime")
 
-    run_cmd(f"{sys.executable} -m pip install -q fastapi uvicorn pycloudflared soundfile numpy espeakng-loader phonemizer")
+    run_cmd(f"{sys.executable} -m pip install -q fastapi uvicorn pycloudflared soundfile numpy scipy espeakng-loader phonemizer")
     run_cmd(f"{sys.executable} -m pip install -q --no-deps kokoro-onnx")
+
+    import importlib
+    importlib.invalidate_caches()
 
     import fastapi
     import uvicorn
     import pycloudflared
     import soundfile
+    import onnxruntime as ort
     from kokoro_onnx import Kokoro
 
 import onnxruntime as ort
