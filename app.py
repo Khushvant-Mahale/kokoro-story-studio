@@ -183,6 +183,8 @@ async def handle_get_projects(request):
     return web.json_response(projs)
 
 
+_recent_created_projects = {}
+
 async def handle_create_project(request):
     data = await request.json()
     title = data.get("title", "Untitled Project").strip() or "Untitled Project"
@@ -190,7 +192,17 @@ async def handle_create_project(request):
     defaults = data.get("defaults") or data.get("default_settings") or {}
     default_voice = data.get("default_voice") or defaults.get("voice_id", "blend_fenrir_onyx")
     default_voice = default_voice.strip() if isinstance(default_voice, str) else "blend_fenrir_onyx"
-    
+
+    # Deduplication guard: if an identical request was processed within the last 3 seconds, return existing
+    import hashlib
+    import time
+    dedup_key = f"{title}_{hashlib.md5((raw_text or str(data.get('blocks', []))).encode('utf-8')).hexdigest()}"
+    now = time.time()
+    if dedup_key in _recent_created_projects:
+        ts, cached_proj = _recent_created_projects[dedup_key]
+        if now - ts < 3.0:
+            return web.json_response(cached_proj)
+
     # Generate ID
     import uuid
     proj_id = f"proj_{uuid.uuid4().hex[:8]}"
@@ -238,6 +250,7 @@ async def handle_create_project(request):
         "master_filename": f"{proj_id}_master.wav"
     }
     project_mgr.save_project(proj_data, proj_id)
+    _recent_created_projects[dedup_key] = (time.time(), proj_data)
     return web.json_response(proj_data)
 
 

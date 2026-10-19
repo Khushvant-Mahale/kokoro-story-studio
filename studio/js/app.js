@@ -4428,7 +4428,10 @@ async function loadSampleIntoNewProject() {
   }
 }
 
+let isImportingProjectJson = false;
+
 function processImportedFile(file, targetContext) {
+  if (isImportingProjectJson) return;
   const reader = new FileReader();
   reader.onload = async (event) => {
     const content = event.target.result;
@@ -4438,25 +4441,30 @@ function processImportedFile(file, targetContext) {
       try {
         const parsed = JSON.parse(content);
         if (parsed.blocks && Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
+          isImportingProjectJson = true;
           showToast(`📥 Importing project JSON "${parsed.title || file.name}"...`);
           const title = parsed.title || cleanTitleFromFilename(file.name);
           const defaultVoice = parsed.default_voice || "blend_fenrir_onyx";
-          const res = await fetch("/api/projects/new", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: title,
-              default_voice: defaultVoice,
-              blocks: parsed.blocks
-            })
-          });
-          const newProj = await res.json();
-          if (newProj && newProj.id) {
-            closeNewProjectModal();
-            window.open(`/studio?project=${encodeURIComponent(newProj.id)}`, "_blank");
-            loadProjectsList();
-            showToast(`✓ Project "${title}" imported with ${parsed.blocks.length} sentences!`);
-            return;
+          try {
+            const res = await fetch("/api/projects/new", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: title,
+                default_voice: defaultVoice,
+                blocks: parsed.blocks
+              })
+            });
+            const newProj = await res.json();
+            if (newProj && newProj.id) {
+              closeNewProjectModal();
+              window.open(`/studio?project=${encodeURIComponent(newProj.id)}`, "_blank");
+              loadProjectsList();
+              showToast(`✓ Project "${title}" imported with ${parsed.blocks.length} sentences!`);
+              return;
+            }
+          } finally {
+            isImportingProjectJson = false;
           }
         } else if (parsed.text) {
           applyTextToFileModal(parsed.title || cleanTitleFromFilename(file.name), parsed.text, file.name);
@@ -4464,6 +4472,8 @@ function processImportedFile(file, targetContext) {
         }
       } catch (jsonErr) {
         console.warn("JSON parse error, falling back to raw text:", jsonErr);
+      } finally {
+        isImportingProjectJson = false;
       }
     }
 
@@ -4494,10 +4504,21 @@ function applyTextToFileModal(title, text, fileName) {
   showToast(`✓ Loaded "${fileName}" (${(text.length / 1024).toFixed(1)} KB)`);
 }
 
+let isCreatingProject = false;
+
 async function handleCreateProjectSubmit() {
+  if (isCreatingProject) return;
+
+  const submitBtn = document.getElementById("btn-create-project-submit");
   const title = (document.getElementById("new-project-title-input")?.value || "").trim() || "Untitled Project";
   const text = (document.getElementById("new-project-text-input")?.value || "").trim();
   const defaultVoice = document.getElementById("new-project-voice-select")?.value || "blend_fenrir_onyx";
+
+  isCreatingProject = true;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "⏳ Creating Project...";
+  }
 
   const defs = getProjectDefaultSettings();
   try {
@@ -4513,6 +4534,12 @@ async function handleCreateProjectSubmit() {
     loadProjectsList();
   } catch (err) {
     alert("Could not create project: " + err);
+  } finally {
+    isCreatingProject = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Create & Open Studio";
+    }
   }
 }
 
@@ -5105,13 +5132,6 @@ function setupEventListeners() {
   document.getElementById("btn-back-to-dashboard")?.addEventListener("click", () => {
     switchToView("dashboard");
   });
-
-  // Top Nav Create Project Button
-  document.getElementById("btn-create-project-top")?.addEventListener("click", openNewProjectModal);
-
-  // New Project Submit & Close
-  document.getElementById("btn-create-project-submit")?.addEventListener("click", handleCreateProjectSubmit);
-  document.getElementById("new-project-close-btn")?.addEventListener("click", closeNewProjectModal);
 
   // Dashboard Hero Dropzone drag & drop
   const dashDropzone = document.getElementById("dashboard-dropzone");
