@@ -273,6 +273,9 @@
           </button>
         </div>
 
+        <!-- Character Link & Custom Status Banner (Persistent across tabs) -->
+        <div id="inspector-character-link-banner" style="display: none; margin: 8px 12px 2px 12px;"></div>
+
         <!-- TAB PANE 1: AUDIO & PACING -->
         <div class="inspector-tab-pane active" id="inspector-tab-pane-audio">
           <!-- Acoustics & Pacing -->
@@ -375,9 +378,6 @@
               <span id="default-voice-indicator" style="font-size: 11px; font-weight: 600; color: var(--accent);"></span>
             </div>
             
-            <!-- Character Link & Custom Status Banner -->
-            <div id="inspector-character-link-banner" style="display: none;"></div>
-
             <div class="voice-card-trigger" id="inspector-voice-card" title="Click to choose a different voice">
               <div class="voice-avatar-badge" id="inspector-voice-avatar" style="background-color: #ea580c">FO</div>
               <div class="voice-meta-col">
@@ -531,6 +531,9 @@
             </button>
             <button class="action-pill-btn" id="btn-bulk-export" onclick="exportSelectedAudio()" title="Export selected audio (single sentence as WAV, multiple as ZIP)" style="display: none;">
               📦 Export
+            </button>
+            <button class="action-pill-btn" id="btn-bulk-custom-toggle" onclick="toggleBlockCustomEdited()" title="Toggle whether selected sentences are marked custom-edited or synced with their character" style="display: none;">
+              🔄 Custom / Synced
             </button>
             <button class="action-pill-btn danger" id="btn-bulk-delete" onclick="handleBulkDelete()" title="Delete selected sentences" style="display: none;">
               🗑️ Delete

@@ -1149,7 +1149,7 @@ function renderBlocks() {
           <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert non-spoken Scene Heading below (🎬)" style="font-size: 13px;">🎬</button>
         </div>
         <button type="button" class="play-block-btn" title="Play sentence (or Space)">${isPlaying ? "🔊" : "▶"}</button>
-        <button type="button" class="delete-block-btn" onclick="deleteBlock(${idx})" title="Delete sentence">✕</button>
+        <button type="button" class="delete-block-btn" title="Delete sentence">✕</button>
       </div>
     `;
 
@@ -1437,6 +1437,16 @@ function updateSelectionUI() {
       btnExport.title = `Export ${count} selected sentences into a ZIP archive`;
     } else {
       btnExport.style.display = "none";
+    }
+  }
+
+  const btnCustomToggle = document.getElementById("btn-bulk-custom-toggle");
+  if (btnCustomToggle) {
+    if (count > 1) {
+      btnCustomToggle.style.display = "inline-flex";
+      btnCustomToggle.textContent = `🔄 Custom/Sync (${count})`;
+    } else {
+      btnCustomToggle.style.display = "none";
     }
   }
 
@@ -2222,6 +2232,75 @@ function pullActiveSentenceToCharModal() {
   showToast("📥 Pulled voice actor & tone settings from active sentence!");
 }
 
+function updateCharModalLinkedInfo(char) {
+  const linkedInfo = document.getElementById("char-modal-linked-info");
+  if (!linkedInfo) return;
+  if (!char || !state.currentProject?.blocks) {
+    linkedInfo.style.display = "none";
+    return;
+  }
+
+  const linkedBlocks = state.currentProject.blocks.filter(b => b.character_id === char.id);
+  const customCount = linkedBlocks.filter(b => b.is_custom_edited === true).length;
+  const syncableCount = linkedBlocks.length - customCount;
+
+  if (linkedBlocks.length === 0) {
+    linkedInfo.innerHTML = `ℹ️ No sentences currently assigned to this character in this story.`;
+  } else if (customCount === 0) {
+    linkedInfo.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <span>🔗 <strong>${linkedBlocks.length} sentence${linkedBlocks.length > 1 ? 's' : ''}</strong> in this story will update immediately upon saving.</span>
+        <button type="button" class="btn btn-secondary" onclick="markAllBlocksOfCharacter('${char.id}', true)" style="font-size: 11px; padding: 3px 8px; white-space: nowrap;" title="Protect all sentences from character auto-updates">🔒 Protect All as Custom</button>
+      </div>
+    `;
+  } else {
+    linkedInfo.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+          <div>
+            🔗 <strong>${syncableCount} sentence${syncableCount !== 1 ? 's' : ''}</strong> will update immediately.<br>
+            <span style="color: #fbbf24;">🛡️ ${customCount} custom-edited sentence${customCount > 1 ? 's' : ''} currently preserved.</span>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="btn btn-secondary" onclick="markAllBlocksOfCharacter('${char.id}', false)" style="font-size: 11px; padding: 3px 8px;" title="Reset custom flags so all sentences sync with character">🔗 Make All Synced</button>
+            <button type="button" class="btn btn-secondary" onclick="markAllBlocksOfCharacter('${char.id}', true)" style="font-size: 11px; padding: 3px 8px;" title="Mark all sentences as custom-edited">🔒 Protect All</button>
+          </div>
+        </div>
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #fef08a; background: rgba(245, 158, 11, 0.12); border: 1px dashed rgba(245, 158, 11, 0.4); padding: 7px 10px; border-radius: 6px;">
+          <input type="checkbox" id="char-modal-overwrite-custom" style="cursor: pointer; width: 16px; height: 16px; accent-color: #f59e0b;">
+          <span>⚡ Overwrite custom-edited sentences (sync all ${linkedBlocks.length} to these settings)</span>
+        </label>
+      </div>
+    `;
+  }
+  linkedInfo.style.display = "block";
+}
+
+function markAllBlocksOfCharacter(charId, isCustom) {
+  if (!state.currentProject?.blocks) return;
+  const char = getCharacterById(charId);
+  if (!char) return;
+
+  let count = 0;
+  state.currentProject.blocks.forEach(b => {
+    if (b.character_id === charId) {
+      b.is_custom_edited = Boolean(isCustom);
+      count++;
+    }
+  });
+
+  debouncedSave();
+  renderBlocks();
+  renderInspector();
+  updateCharModalLinkedInfo(char);
+
+  if (isCustom) {
+    showToast(`🔒 Marked ${count} sentence${count !== 1 ? 's' : ''} as Custom (protected from character auto-updates).`);
+  } else {
+    showToast(`🔗 Marked ${count} sentence${count !== 1 ? 's' : ''} as Synced (will update with character).`);
+  }
+}
+
 function openEditCharacterModal(charId) {
   const char = getCharacterById(charId);
   if (!char) return;
@@ -2266,18 +2345,7 @@ function openEditCharacterModal(charId) {
 
   // Linked Sentences Count calculation
   if (linkedInfo && state.currentProject?.blocks) {
-    const linkedBlocks = state.currentProject.blocks.filter(b => b.character_id === char.id);
-    const customCount = linkedBlocks.filter(b => b.is_custom_edited === true).length;
-    const syncableCount = linkedBlocks.length - customCount;
-
-    if (linkedBlocks.length === 0) {
-      linkedInfo.innerHTML = `ℹ️ No sentences currently assigned to this character in this story.`;
-    } else if (customCount === 0) {
-      linkedInfo.innerHTML = `🔗 <strong>${linkedBlocks.length} sentence${linkedBlocks.length > 1 ? 's' : ''}</strong> in this story will update immediately upon saving.`;
-    } else {
-      linkedInfo.innerHTML = `🔗 <strong>${syncableCount} sentence${syncableCount !== 1 ? 's' : ''}</strong> will update immediately. <br><span style="color: #fbbf24;">🛡️ ${customCount} custom-edited sentence${customCount > 1 ? 's' : ''} will be strictly preserved.</span>`;
-    }
-    linkedInfo.style.display = "block";
+    updateCharModalLinkedInfo(char);
   }
 
   if (modal) modal.classList.add("active");
@@ -2403,7 +2471,9 @@ function confirmSaveCharacter() {
     }
 
     saveSavedCharactersToStorage();
-    const syncRes = syncCharacterToBlocks(char.id);
+    const overwriteCheckbox = document.getElementById("char-modal-overwrite-custom");
+    const shouldOverwrite = Boolean(overwriteCheckbox && overwriteCheckbox.checked);
+    const syncRes = syncCharacterToBlocks(char.id, shouldOverwrite);
     closeSaveCharacterModal();
     renderSavedCharactersList();
     renderStudio();
@@ -2461,7 +2531,7 @@ function confirmSaveCharacter() {
   }
 }
 
-function syncCharacterToBlocks(charId) {
+function syncCharacterToBlocks(charId, overwriteCustom = false) {
   const char = getCharacterById(charId);
   if (!char || !state.currentProject || !state.currentProject.blocks) return { updatedCount: 0, skippedCustomCount: 0 };
 
@@ -2470,9 +2540,13 @@ function syncCharacterToBlocks(charId) {
 
   state.currentProject.blocks.forEach((b, idx) => {
     if (b.character_id === charId) {
-      if (b.is_custom_edited === true) {
+      if (b.is_custom_edited === true && !overwriteCustom) {
         skippedCustomCount++;
         return; // PRESERVE CUSTOM EDITED SENTENCES!
+      }
+
+      if (overwriteCustom) {
+        b.is_custom_edited = false;
       }
 
       b.voice_id = char.voice_id;
@@ -2503,6 +2577,10 @@ function syncCharacterToBlocks(charId) {
         if (avatar) {
           avatar.style.backgroundColor = char.color || getVoiceById(char.voice_id).color;
           avatar.textContent = char.badge || char.name.slice(0, 2).toUpperCase();
+          if (overwriteCustom) {
+            const dot = avatar.querySelector(".custom-tweak-dot");
+            if (dot) dot.remove();
+          }
         }
       }
       updatedCount++;
@@ -2690,28 +2768,80 @@ function updateActiveCharacterStatusBanner() {
   banner.className = "character-status-banner";
   banner.style.display = "flex";
 
+  const isMulti = state.selectedBlockIndices && state.selectedBlockIndices.size > 1;
+  const multiSuffix = isMulti ? ` (${state.selectedBlockIndices.size} selected)` : "";
+
   if (block.is_custom_edited) {
     banner.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-main);">
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-main); min-width: 0;">
         <span style="font-size: 14px;">🎭</span>
-        <span>Character: <strong>${escapeHtml(char.name)}</strong></span>
-        <span style="color: #f59e0b; font-weight: 600; font-size: 11px; background: rgba(245, 158, 11, 0.15); border-radius: 4px; padding: 1px 5px;">Customized</span>
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Character: <strong>${escapeHtml(char.name)}</strong>${multiSuffix}</span>
+        <span style="color: #f59e0b; font-weight: 600; font-size: 11px; background: rgba(245, 158, 11, 0.15); border-radius: 4px; padding: 1px 5px; white-space: nowrap;" title="This sentence has custom tone/pacing settings">Customized</span>
       </div>
-      <div style="display: flex; gap: 6px;">
-        <button type="button" class="btn btn-secondary" onclick="revertActiveBlockToCharacter()" style="padding: 3px 8px; font-size: 11px; white-space: nowrap;" title="Revert sentence to original character settings">↺ Revert</button>
+      <div style="display: flex; gap: 5px; align-items: center; flex-shrink: 0;">
+        <button type="button" class="btn btn-secondary" onclick="toggleBlockCustomEdited(false)" style="padding: 3px 8px; font-size: 11px; white-space: nowrap;" title="Change status: mark sentence as Synced so character updates apply to it">🔗 Make Synced</button>
+        <button type="button" class="btn btn-secondary" onclick="revertActiveBlockToCharacter()" style="padding: 3px 8px; font-size: 11px; white-space: nowrap;" title="Revert audio sliders back to original character defaults">↺ Revert</button>
       </div>
     `;
   } else {
     banner.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-main);">
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-main); min-width: 0;">
         <span style="font-size: 14px;">🎭</span>
-        <span>Character: <strong>${escapeHtml(char.name)}</strong></span>
-        <span style="color: #10b981; font-weight: 600; font-size: 11px; background: rgba(16, 185, 129, 0.15); border-radius: 4px; padding: 1px 5px;">Synced</span>
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Character: <strong>${escapeHtml(char.name)}</strong>${multiSuffix}</span>
+        <span style="color: #10b981; font-weight: 600; font-size: 11px; background: rgba(16, 185, 129, 0.15); border-radius: 4px; padding: 1px 5px; white-space: nowrap;" title="This sentence stays in sync with character settings">Synced</span>
       </div>
-      <div style="display: flex; gap: 6px;">
+      <div style="display: flex; gap: 5px; align-items: center; flex-shrink: 0;">
+        <button type="button" class="btn btn-secondary" onclick="toggleBlockCustomEdited(true)" style="padding: 3px 8px; font-size: 11px; white-space: nowrap;" title="Change status: mark as Custom to protect this sentence from character updates">🔒 Make Custom</button>
         <button type="button" class="btn btn-secondary" onclick="openEditCharacterModal('${char.id}')" style="padding: 3px 8px; font-size: 11px;" title="Edit this character's voice & settings">✏️ Edit</button>
       </div>
     `;
+  }
+}
+
+function toggleBlockCustomEdited(forceIsCustom) {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+
+  const targets = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
+    ? Array.from(state.selectedBlockIndices)
+    : [(typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0) ? state.activeBlockIndex : 0];
+
+  const validTargets = targets.filter(i => {
+    const b = state.currentProject.blocks[i];
+    return b && b.type !== "heading" && b.is_spoken !== false;
+  });
+
+  if (validTargets.length === 0) {
+    showToast("⚠️ Select a spoken sentence block first.");
+    return;
+  }
+
+  const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0) ? state.activeBlockIndex : validTargets[0];
+  const activeBlock = state.currentProject.blocks[activeIdx];
+
+  const nextIsCustom = (typeof forceIsCustom === "boolean")
+    ? forceIsCustom
+    : (activeBlock ? !activeBlock.is_custom_edited : false);
+
+  recordHistory(nextIsCustom ? "Mark Sentence(s) as Custom" : "Mark Sentence(s) as Synced");
+
+  validTargets.forEach(i => {
+    const b = state.currentProject.blocks[i];
+    b.is_custom_edited = nextIsCustom;
+  });
+
+  debouncedSave();
+  renderBlocks();
+  renderInspector();
+  updateActiveCharacterStatusBanner();
+
+  if (validTargets.length === 1) {
+    showToast(nextIsCustom
+      ? "🔒 Sentence marked as Custom (protected from character auto-updates)."
+      : "🔗 Sentence marked as Synced (will update when character is saved).");
+  } else {
+    showToast(nextIsCustom
+      ? `🔒 ${validTargets.length} sentences marked as Custom.`
+      : `🔗 ${validTargets.length} sentences marked as Synced.`);
   }
 }
 
@@ -6450,5 +6580,7 @@ window.handleExportSelectedFromMenu = handleExportSelectedFromMenu;
 window.handleExportMasterFromMenu = handleExportMasterFromMenu;
 window.handleExportZipFromMenu = handleExportZipFromMenu;
 window.handleExportProjectJson = handleExportProjectJson;
+window.toggleBlockCustomEdited = toggleBlockCustomEdited;
+window.markAllBlocksOfCharacter = markAllBlocksOfCharacter;
 
 
