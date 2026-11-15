@@ -164,21 +164,17 @@ async def handle_apply_dsp(request):
         return web.json_response({"error": "audio_url is required"}, status=400)
 
     clean_name = Path(audio_url.replace("\\", "/").split("?")[0]).name
-    candidates = [CACHE_DIR / clean_name]
-    if clean_name.startswith("dsp_"):
-        stem = Path(clean_name).stem[4:]
-        parts = stem.split("_")
-        base = "_".join(parts[:-1]) if len(parts) > 1 else stem
-        candidates.extend([
-            CACHE_DIR / f"{base}.wav",
-            CACHE_DIR / f"raw_{base}.wav",
-            CACHE_DIR / f"{base.removeprefix('raw_')}.wav"
-        ])
     base_stem = Path(clean_name).stem.removeprefix("raw_")
-    candidates.extend([
+    if base_stem.startswith("dsp_"):
+        parts = base_stem[4:].split("_")
+        base_stem = "_".join(parts[:-1]) if len(parts) > 1 else parts[0]
+        base_stem = base_stem.removeprefix("raw_")
+
+    candidates = [
         CACHE_DIR / f"raw_{base_stem}.wav",
-        CACHE_DIR / f"{base_stem}.wav"
-    ])
+        CACHE_DIR / f"{base_stem}.wav",
+        CACHE_DIR / clean_name
+    ]
 
     source_path = None
     for cand in candidates:
@@ -208,15 +204,18 @@ async def handle_apply_dsp(request):
         samples, sr = sf.read(str(source_path))
         if is_neutral:
             dur = len(samples) / sr
+            neutral_file = CACHE_DIR / f"{base_stem}.wav"
+            if not neutral_file.exists():
+                sf.write(str(neutral_file), samples, sr)
             return {
                 "ok": True,
-                "audio_url": f"/api/audio/{source_path.name}?t={int(time.time()*1000)}",
+                "audio_url": f"/api/audio/{neutral_file.name}?t={int(time.time()*1000)}",
                 "duration": round(dur, 2),
                 "is_raw": True
             }
 
         dsp_sig = hashlib.md5(f"g{gain:.2f}_s{speed:.2f}_p{pitch_shift:.1f}_w{warmth:.1f}_c{clarity:.1f}_r{reverb:.2f}_f{fx_filter}".encode()).hexdigest()[:8]
-        out_name = f"dsp_{source_path.stem}_{dsp_sig}.wav"
+        out_name = f"dsp_{base_stem}_{dsp_sig}.wav"
         out_path = CACHE_DIR / out_name
 
         if not out_path.exists():
@@ -259,21 +258,23 @@ async def handle_reset_dsp(request):
         return web.json_response({"error": "audio_url is required"}, status=400)
 
     clean_name = Path(audio_url.split("?")[0]).name
-    target_path = CACHE_DIR / clean_name
+    base_stem = Path(clean_name).stem.removeprefix("raw_")
+    if base_stem.startswith("dsp_"):
+        parts = base_stem[4:].split("_")
+        base_stem = "_".join(parts[:-1]) if len(parts) > 1 else parts[0]
+        base_stem = base_stem.removeprefix("raw_")
+
+    candidates = [
+        CACHE_DIR / f"raw_{base_stem}.wav",
+        CACHE_DIR / f"{base_stem}.wav",
+        CACHE_DIR / clean_name
+    ]
 
     source_path = None
-    if clean_name.startswith("dsp_"):
-        parts = clean_name[4:].split("_")
-        base_name = "_".join(parts[:-1]) if len(parts) > 1 else parts[0]
-        for cand in [CACHE_DIR / f"raw_{base_name}.wav", CACHE_DIR / f"{base_name}.wav"]:
-            if cand.exists():
-                source_path = cand
-                break
-    else:
-        for cand in [CACHE_DIR / f"raw_{clean_name}", target_path]:
-            if cand.exists():
-                source_path = cand
-                break
+    for cand in candidates:
+        if cand.exists():
+            source_path = cand
+            break
 
     if not source_path or not source_path.exists():
         return web.json_response({"error": "Raw audio take not found"}, status=404)

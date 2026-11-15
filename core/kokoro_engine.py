@@ -171,6 +171,13 @@ class KokoroEngine:
                     fx_filter=fx_filter_s
                 )
                 sf.write(str(cache_file), processed, self.sample_rate)
+                try:
+                    raw_hash_path = CACHE_DIR / f"raw_{cache_hash}.wav"
+                    if not raw_hash_path.exists():
+                        import shutil
+                        shutil.copyfile(str(raw_cache_file), str(raw_hash_path))
+                except Exception:
+                    pass
                 duration = len(processed) / self.sample_rate
                 return {
                     "hash": cache_hash,
@@ -187,19 +194,21 @@ class KokoroEngine:
             try:
                 import urllib.request
                 import json
+                import io
                 remote_endpoint = f"{self.remote_url.rstrip('/')}/synthesize"
+                # Always request pure neutral speech from remote worker (DSP is sculpted locally via WSOLA)
                 payload = json.dumps({
                     "text": clean_text,
                     "voice_id": voice_id,
                     "blend_weights": blend_weights,
                     "speed": speed,
-                    "gain": gain,
-                    "pitch_shift": pitch_shift_f,
-                    "warmth": warmth_f,
-                    "clarity": clarity_f,
-                    "reverb": reverb_f,
-                    "radio_fx": fx_filter_s == "radio",
-                    "fx_filter": fx_filter_s,
+                    "gain": 1.0,
+                    "pitch_shift": 0.0,
+                    "warmth": 0.0,
+                    "clarity": 0.0,
+                    "reverb": 0.0,
+                    "radio_fx": False,
+                    "fx_filter": "none",
                     "lang": lang
                 }).encode("utf-8")
                 req = urllib.request.Request(
@@ -213,15 +222,49 @@ class KokoroEngine:
                 with urllib.request.urlopen(req, timeout=15) as response:
                     audio_bytes = response.read()
                     if audio_bytes and len(audio_bytes) > 100:
-                        with open(cache_file, "wb") as f:
-                            f.write(audio_bytes)
-                        if pitch_shift_f == 0.0 and warmth_f == 0.0 and clarity_f == 0.0 and reverb_f == 0.0 and fx_filter_s == "none" and gain == 1.0:
-                            try:
-                                with open(raw_cache_file, "wb") as f_raw:
-                                    f_raw.write(audio_bytes)
-                            except Exception:
-                                pass
-                        data, sr = sf.read(str(cache_file))
+                        # 1. Save raw untouched neural voice for instant non-destructive DSP re-sculpting
+                        try:
+                            with open(raw_cache_file, "wb") as f_raw:
+                                f_raw.write(audio_bytes)
+                        except Exception:
+                            pass
+                        try:
+                            with open(CACHE_DIR / f"raw_{cache_hash}.wav", "wb") as f_raw_hash:
+                                f_raw_hash.write(audio_bytes)
+                        except Exception:
+                            pass
+
+                        # 2. Check if DSP settings are neutral
+                        is_neutral = (
+                            abs(pitch_shift_f) < 0.01 and
+                            abs(warmth_f) < 0.1 and
+                            abs(clarity_f) < 0.1 and
+                            reverb_f < 0.01 and
+                            fx_filter_s == "none" and
+                            abs(gain - 1.0) < 0.01
+                        )
+
+                        if is_neutral:
+                            with open(cache_file, "wb") as f:
+                                f.write(audio_bytes)
+                            data, sr = sf.read(str(cache_file))
+                        else:
+                            raw_samples, sr = sf.read(io.BytesIO(audio_bytes))
+                            if gain != 1.0:
+                                raw_samples = raw_samples * gain
+                            processed = process_audio_fx(
+                                raw_samples,
+                                sr=sr,
+                                pitch_shift_st=pitch_shift_f,
+                                warmth_db=warmth_f,
+                                clarity_db=clarity_f,
+                                reverb_wet=reverb_f,
+                                speed=1.0,
+                                fx_filter=fx_filter_s
+                            )
+                            sf.write(str(cache_file), processed, sr)
+                            data = processed
+
                         duration = len(data) / sr
                         return {
                             "hash": cache_hash,
@@ -267,28 +310,42 @@ class KokoroEngine:
         # Cache raw neural speech before gain and DSP for future instant re-sculpting (<0.1s)
         try:
             sf.write(str(raw_cache_file), raw_samples, self.sample_rate)
+            sf.write(str(CACHE_DIR / f"raw_{cache_hash}.wav"), raw_samples, self.sample_rate)
         except Exception:
             pass
 
         # Apply gain/volume scaling
         if gain != 1.0:
-            raw_samples = raw_samples * gain
+            samples_to_process = raw_samples * gain
+        else:
+            samples_to_process = raw_samples.copy()
 
-        # Apply voice audio DSP: pitch shift, warmth EQ, clarity air, reverb & acoustic FX filter
-        raw_samples = process_audio_fx(
-            raw_samples,
-            sr=self.sample_rate,
-            pitch_shift_st=pitch_shift_f,
-            warmth_db=warmth_f,
-            clarity_db=clarity_f,
-            reverb_wet=reverb_f,
-            speed=1.0,
-            fx_filter=fx_filter_s
+        # Apply voice audio DSP if non-neutral
+        is_neutral = (
+            abs(pitch_shift_f) < 0.01 and
+            abs(warmth_f) < 0.1 and
+            abs(clarity_f) < 0.1 and
+            reverb_f < 0.01 and
+            fx_filter_s == "none" and
+            abs(gain - 1.0) < 0.01
         )
+        if not is_neutral:
+            processed_samples = process_audio_fx(
+                samples_to_process,
+                sr=self.sample_rate,
+                pitch_shift_st=pitch_shift_f,
+                warmth_db=warmth_f,
+                clarity_db=clarity_f,
+                reverb_wet=reverb_f,
+                speed=1.0,
+                fx_filter=fx_filter_s
+            )
+        else:
+            processed_samples = samples_to_process
 
         # Save to cache
-        sf.write(str(cache_file), raw_samples, self.sample_rate)
-        duration = len(raw_samples) / self.sample_rate
+        sf.write(str(cache_file), processed_samples, self.sample_rate)
+        duration = len(processed_samples) / self.sample_rate
 
         return {
             "hash": cache_hash,
