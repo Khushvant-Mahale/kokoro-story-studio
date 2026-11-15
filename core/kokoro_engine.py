@@ -111,7 +111,8 @@ class KokoroEngine:
         reverb: float = 0.0,
         radio_fx: bool = False,
         fx_filter: str = "none",
-        lang: str = "en-us"
+        lang: str = "en-us",
+        force_refresh: bool = False
     ) -> Dict:
         """
         Synthesizes a single text block, caching to disk.
@@ -140,7 +141,7 @@ class KokoroEngine:
         cache_file = CACHE_DIR / f"{cache_hash}.wav"
 
         # Check cache
-        if cache_file.exists():
+        if not force_refresh and cache_file.exists():
             data, sr = sf.read(str(cache_file))
             duration = len(data) / sr
             return {
@@ -155,7 +156,7 @@ class KokoroEngine:
         raw_cache_hash = hashlib.md5(raw_cache_str.encode("utf-8")).hexdigest()
         raw_cache_file = CACHE_DIR / f"raw_{raw_cache_hash}.wav"
 
-        if raw_cache_file.exists():
+        if not force_refresh and raw_cache_file.exists():
             try:
                 base_samples, sr = sf.read(str(raw_cache_file))
                 processed = base_samples * gain if gain != 1.0 else base_samples.copy()
@@ -166,6 +167,7 @@ class KokoroEngine:
                     warmth_db=warmth_f,
                     clarity_db=clarity_f,
                     reverb_wet=reverb_f,
+                    speed=1.0,
                     fx_filter=fx_filter_s
                 )
                 sf.write(str(cache_file), processed, self.sample_rate)
@@ -280,6 +282,7 @@ class KokoroEngine:
             warmth_db=warmth_f,
             clarity_db=clarity_f,
             reverb_wet=reverb_f,
+            speed=1.0,
             fx_filter=fx_filter_s
         )
 

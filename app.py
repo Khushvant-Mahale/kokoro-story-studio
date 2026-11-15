@@ -84,6 +84,7 @@ async def handle_synthesize_block(request):
     reverb = float(data.get("reverb", 0.0))
     radio_fx = bool(data.get("radio_fx", False))
     fx_filter = str(data.get("fx_filter") or ("radio" if radio_fx else "none")).strip().lower()
+    force_refresh = bool(data.get("force_refresh", False) or data.get("force", False))
 
     if not text:
         return web.json_response({"error": "Text is required"}, status=400)
@@ -101,7 +102,8 @@ async def handle_synthesize_block(request):
             clarity=clarity,
             reverb=reverb,
             radio_fx=radio_fx,
-            fx_filter=fx_filter
+            fx_filter=fx_filter,
+            force_refresh=force_refresh
         )
         return web.json_response(res)
     except Exception as e:

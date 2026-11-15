@@ -1149,6 +1149,7 @@ function renderBlocks() {
           <button type="button" class="insert-block-btn" onclick="insertHeadingAfter(${idx})" title="Insert non-spoken Scene Heading below (🎬)" style="font-size: 13px;">🎬</button>
         </div>
         <button type="button" class="play-block-btn" title="Play sentence (or Space)">${isPlaying ? "🔊" : "▶"}</button>
+        <button type="button" class="rerender-block-btn" onclick="handleReRenderBlock(${idx})" title="Force re-render fresh take (bypasses cache)">🔄</button>
         <button type="button" class="delete-block-btn" title="Delete sentence">✕</button>
       </div>
     `;
@@ -4119,6 +4120,89 @@ function handleMasterNext() {
   playBlockAudio(nextIdx, 0, false);
 }
 
+// Force re-render a single block with fresh neural take (bypasses cache)
+async function handleReRenderBlock(idx) {
+  if (idx === null || idx === undefined) return;
+  const block = state.currentProject?.blocks?.[idx];
+  if (!block) return;
+
+  selectBlock(idx, "single");
+  delete block.cachedAudioUrl;
+  delete block.cachedSig;
+  delete block.duration;
+
+  const row = document.querySelector(`[data-index="${idx}"]`);
+  const rerenderBtn = row?.querySelector(".rerender-block-btn");
+  const playBtn = row?.querySelector(".play-block-btn");
+  const timeText = row?.querySelector(".scrubber-time");
+
+  if (row) {
+    row.classList.add("processing");
+    row.classList.remove("ready", "playing");
+  }
+  if (rerenderBtn) rerenderBtn.textContent = "⏳";
+  if (playBtn) playBtn.textContent = "⏳";
+  if (timeText) timeText.textContent = "⏳ Re-rendering fresh take...";
+
+  try {
+    showToast(`🔄 Generating fresh take for Sentence #${idx + 1}...`);
+    const res = await fetch("/api/synthesize_block", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: block.text,
+        voice_id: block.voice_id,
+        blend_weights: block.blend_weights,
+        speed: block.speed || 0.90,
+        gain: block.gain || 1.0,
+        pitch_shift: block.pitch_shift || 0.0,
+        warmth: block.warmth || 0.0,
+        clarity: block.clarity || 0.0,
+        reverb: block.reverb || 0.0,
+        radio_fx: Boolean(block.radio_fx),
+        fx_filter: block.fx_filter || (block.radio_fx ? "radio" : "none"),
+        force_refresh: true
+      })
+    });
+
+    let data = null;
+    const cType = res.headers.get("content-type") || "";
+    if (cType.includes("application/json")) {
+      data = await res.json().catch(() => null);
+    }
+    if (!data) {
+      const rawText = await res.text().catch(() => "");
+      throw new Error(`Server returned HTTP ${res.status}${rawText ? `: ${rawText.slice(0, 120)}` : ""}`);
+    }
+
+    if (data.audio_url) {
+      block.cachedAudioUrl = data.audio_url;
+      block.cachedSig = getBlockSignature(block);
+      block.duration = data.duration;
+      debouncedSave();
+      renderTimeline();
+      if (row) {
+        row.classList.remove("processing");
+        row.classList.add("ready");
+      }
+      if (rerenderBtn) rerenderBtn.textContent = "🔄";
+      if (playBtn) playBtn.textContent = "▶";
+      if (timeText && data.duration) timeText.textContent = `● ${data.duration.toFixed(1)}s`;
+      showToast(`✨ Fresh take generated for Sentence #${idx + 1} (${data.duration.toFixed(1)}s)!`);
+      playBlockAudio(idx, 0, false);
+    } else {
+      throw new Error(data.error || "Synthesis failed");
+    }
+  } catch (err) {
+    console.error("Re-render error:", err);
+    if (row) row.classList.remove("processing");
+    if (rerenderBtn) rerenderBtn.textContent = "🔄";
+    if (playBtn) playBtn.textContent = "▶";
+    if (timeText) timeText.textContent = "Error";
+    showToast(`⚠️ Re-render failed: ${err.message}`, 4000);
+  }
+}
+
 // ---------------- PARALLEL GPU BATCH GENERATOR & LIVE ETA ---------------- //
 
 function formatBatchDuration(totalSec) {
@@ -6540,6 +6624,8 @@ function resetDspToNeutral() {
     b.warmth = 0.0;
     b.clarity = 0.0;
     b.reverb = 0.0;
+    b.radio_fx = false;
+    b.fx_filter = "none";
     if (b.character_id) {
       b.is_custom_edited = true;
     }
@@ -6548,12 +6634,13 @@ function resetDspToNeutral() {
   debouncedSave();
   updateActiveCharacterStatusBanner();
   recordHistory("Reset Tone to Neutral");
-  showToast("↺ Voice tone reset to neutral");
+  showToast("↺ Voice tone & FX reset to neutral");
 }
 
 window.switchInspectorTab = switchInspectorTab;
 window.toggleInspectorCollapse = toggleInspectorCollapse;
 window.resetDspToNeutral = resetDspToNeutral;
+window.handleReRenderBlock = handleReRenderBlock;
 window.openEditCharacterModal = openEditCharacterModal;
 window.handleApplyVoiceAndSettingsToSelected = handleApplyVoiceAndSettingsToSelected;
 window.revertActiveBlockToCharacter = revertActiveBlockToCharacter;

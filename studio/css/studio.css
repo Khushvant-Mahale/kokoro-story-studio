@@ -1436,6 +1436,27 @@ input[type="range"]::-webkit-slider-thumb {
   transform: scale(1.08);
 }
 
+.rerender-block-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--bg-card);
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  transition: all var(--transition-fast);
+  font-size: 13px;
+}
+
+.rerender-block-btn:hover {
+  background-color: #10b981;
+  color: #fff;
+  transform: scale(1.08);
+}
+
 .insert-block-btn {
   width: 28px;
   height: 28px;
