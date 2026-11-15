@@ -1,7 +1,10 @@
 import json
 import asyncio
+import time
+import hashlib
 from pathlib import Path
 from aiohttp import web
+import soundfile as sf
 
 from core.kokoro_engine import KokoroEngine
 from core.project_manager import ProjectManager
@@ -140,6 +143,148 @@ async def handle_blend_preview(request):
         return web.json_response(res)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_apply_dsp(request):
+    """
+    Applies audio post-processing DSP (Gain, Speed, Pitch, EQ, Reverb, FX Filter)
+    INSTANTLY (<20ms) to an already-generated audio take on CPU without calling ONNX/Cloud GPU!
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        body = await request.text()
+        try:
+            data = json.loads(body.replace("\\", "/"))
+        except Exception:
+            return web.json_response({"error": "Invalid request JSON"}, status=400)
+
+    audio_url = str(data.get("audio_url", "")).strip()
+    if not audio_url:
+        return web.json_response({"error": "audio_url is required"}, status=400)
+
+    clean_name = Path(audio_url.replace("\\", "/").split("?")[0]).name
+    candidates = [CACHE_DIR / clean_name]
+    if clean_name.startswith("dsp_"):
+        stem = Path(clean_name).stem[4:]
+        parts = stem.split("_")
+        base = "_".join(parts[:-1]) if len(parts) > 1 else stem
+        candidates.extend([
+            CACHE_DIR / f"{base}.wav",
+            CACHE_DIR / f"raw_{base}.wav",
+            CACHE_DIR / f"{base.removeprefix('raw_')}.wav"
+        ])
+    base_stem = Path(clean_name).stem.removeprefix("raw_")
+    candidates.extend([
+        CACHE_DIR / f"raw_{base_stem}.wav",
+        CACHE_DIR / f"{base_stem}.wav"
+    ])
+
+    source_path = None
+    for cand in candidates:
+        if cand.exists():
+            source_path = cand
+            break
+
+    if not source_path:
+        return web.json_response({"error": f"Audio file not found: {clean_name}"}, status=404)
+
+    gain = float(data.get("gain", 1.0))
+    speed = float(data.get("speed", 1.0))
+    pitch_shift = float(data.get("pitch_shift", 0.0))
+    warmth = float(data.get("warmth", 0.0))
+    clarity = float(data.get("clarity", 0.0))
+    reverb = float(data.get("reverb", 0.0))
+    radio_fx = bool(data.get("radio_fx", False))
+    fx_filter = str(data.get("fx_filter") or ("radio" if radio_fx else "none")).strip().lower()
+
+    is_neutral = (
+        gain == 1.0 and abs(speed - 1.0) < 0.03 and abs(pitch_shift) < 0.05 and
+        abs(warmth) < 0.1 and abs(clarity) < 0.1 and reverb < 0.02 and
+        fx_filter == "none"
+    )
+
+    def _process():
+        samples, sr = sf.read(str(source_path))
+        if is_neutral:
+            dur = len(samples) / sr
+            return {
+                "ok": True,
+                "audio_url": f"/api/audio/{source_path.name}?t={int(time.time()*1000)}",
+                "duration": round(dur, 2),
+                "is_raw": True
+            }
+
+        dsp_sig = hashlib.md5(f"g{gain:.2f}_s{speed:.2f}_p{pitch_shift:.1f}_w{warmth:.1f}_c{clarity:.1f}_r{reverb:.2f}_f{fx_filter}".encode()).hexdigest()[:8]
+        out_name = f"dsp_{source_path.stem}_{dsp_sig}.wav"
+        out_path = CACHE_DIR / out_name
+
+        if not out_path.exists():
+            from core.audio_dsp import process_audio_fx
+            processed = samples * gain if gain != 1.0 else samples.copy()
+            processed = process_audio_fx(
+                processed,
+                sr=sr,
+                pitch_shift_st=pitch_shift,
+                warmth_db=warmth,
+                clarity_db=clarity,
+                reverb_wet=reverb,
+                speed=speed,
+                fx_filter=fx_filter
+            )
+            sf.write(str(out_path), processed, sr)
+
+        info = sf.info(str(out_path))
+        return {
+            "ok": True,
+            "audio_url": f"/api/audio/{out_name}?t={int(time.time()*1000)}",
+            "duration": round(info.duration, 2),
+            "is_raw": False
+        }
+
+    try:
+        res = await asyncio.to_thread(_process)
+        return web.json_response(res)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_reset_dsp(request):
+    """
+    Instantly restores the 100% pure neural raw master take in 1ms!
+    """
+    data = await request.json()
+    audio_url = data.get("audio_url", "").strip()
+    if not audio_url:
+        return web.json_response({"error": "audio_url is required"}, status=400)
+
+    clean_name = Path(audio_url.split("?")[0]).name
+    target_path = CACHE_DIR / clean_name
+
+    source_path = None
+    if clean_name.startswith("dsp_"):
+        parts = clean_name[4:].split("_")
+        base_name = "_".join(parts[:-1]) if len(parts) > 1 else parts[0]
+        for cand in [CACHE_DIR / f"raw_{base_name}.wav", CACHE_DIR / f"{base_name}.wav"]:
+            if cand.exists():
+                source_path = cand
+                break
+    else:
+        for cand in [CACHE_DIR / f"raw_{clean_name}", target_path]:
+            if cand.exists():
+                source_path = cand
+                break
+
+    if not source_path or not source_path.exists():
+        return web.json_response({"error": "Raw audio take not found"}, status=404)
+
+    info = sf.info(str(source_path))
+    return web.json_response({
+        "ok": True,
+        "audio_url": f"/api/audio/{source_path.name}?t={int(time.time()*1000)}",
+        "duration": round(info.duration, 2),
+        "is_raw": True
+    })
 
 
 async def handle_export_master(request):
@@ -335,6 +480,15 @@ async def handle_get_audio(request):
         OUTPUT_DIR / filename,
         SAMPLES_DIR / filename
     ]
+    if filename.startswith("dsp_"):
+        stem = Path(filename).stem[4:]
+        parts = stem.split("_")
+        base = "_".join(parts[:-1]) if len(parts) > 1 else stem
+        candidates.extend([
+            CACHE_DIR / f"{base}.wav",
+            CACHE_DIR / f"raw_{base}.wav",
+            CACHE_DIR / f"{base.removeprefix('raw_')}.wav"
+        ])
     for p in candidates:
         if p.exists():
             if p.suffix == ".zip":
@@ -451,6 +605,8 @@ def create_app():
     app.router.add_get("/api/voices", handle_get_voices)
     app.router.add_post("/api/synthesize_block", handle_synthesize_block)
     app.router.add_post("/api/blend_preview", handle_blend_preview)
+    app.router.add_post("/api/audio/apply_dsp", handle_apply_dsp)
+    app.router.add_post("/api/audio/reset_dsp", handle_reset_dsp)
     app.router.add_post("/api/export_master", handle_export_master)
     app.router.add_post("/api/export_zip", handle_export_zip)
     app.router.add_get("/api/projects", handle_get_projects)

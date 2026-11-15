@@ -328,6 +328,19 @@ class KokoroEngine:
             fx_filter = str(b.get("fx_filter") or ("radio" if radio_fx else "none")).strip().lower()
             pause_after = float(b.get("pause_after", 0.6))
 
+            # Check if block has an already-rendered WAV (e.g. dsp_*.wav or cached hash)
+            cached_url = b.get("cachedAudioUrl")
+            if cached_url:
+                cached_filename = Path(cached_url.split("?")[0]).name
+                cached_path = CACHE_DIR / cached_filename
+                if cached_path.exists():
+                    samples, _ = sf.read(str(cached_path))
+                    audio_segments.append(samples)
+                    if pause_after > 0:
+                        silence = np.zeros(int(self.sample_rate * pause_after), dtype=np.float32)
+                        audio_segments.append(silence)
+                    continue
+
             # Fetch or generate block audio
             res = self.synthesize_block(
                 text=text,
@@ -394,6 +407,19 @@ class KokoroEngine:
                 radio_fx_b = bool(b.get("radio_fx", False))
                 fx_filter_s = str(b.get("fx_filter") or ("radio" if radio_fx_b else "none")).strip().lower()
 
+                # Generate clean filename: 001_sentence_slug.wav
+                slug = re.sub(r'[^a-zA-Z0-9_\- ]', '', text)[:28].strip().replace(' ', '_').lower()
+                arcname = f"{i+1:03d}_{slug}.wav" if slug else f"sentence_{i+1:03d}.wav"
+
+                # Check if block has an already-rendered WAV
+                cached_url = b.get("cachedAudioUrl")
+                if cached_url:
+                    cached_filename = Path(cached_url.split("?")[0]).name
+                    cached_path = CACHE_DIR / cached_filename
+                    if cached_path.exists():
+                        zf.write(str(cached_path), arcname=arcname)
+                        continue
+
                 res = self.synthesize_block(
                     text,
                     voice_id,
@@ -405,14 +431,9 @@ class KokoroEngine:
                     clarity=clarity_f,
                     reverb=reverb_f,
                     radio_fx=radio_fx_b,
-                    fx_filter=fx_filter_s,
+                    fx_filter=fx_filter_s
                 )
                 cache_file = CACHE_DIR / f"{res['hash']}.wav"
-
-                # Generate clean filename: 001_sentence_slug.wav
-                slug = re.sub(r'[^a-zA-Z0-9_\- ]', '', text)[:28].strip().replace(' ', '_').lower()
-                arcname = f"{i+1:03d}_{slug}.wav" if slug else f"sentence_{i+1:03d}.wav"
-
                 zf.write(str(cache_file), arcname=arcname)
 
         return {

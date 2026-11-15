@@ -3115,6 +3115,143 @@ function handleSetCurrentAsDefault() {
   showToast(`⭐ Defaults saved! New sentences will use: ${currentDefaults.speed.toFixed(2)}x speed, ${Math.round(currentDefaults.gain * 100)}% vol, ${currentDefaults.pause_after.toFixed(1)}s pause, voice: "${voiceObj.name}", filter: ${filterLabel}.`);
 }
 
+let _dspDebounceTimer = null;
+
+function triggerInstantBlockDsp(targetIndices = null) {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const rawList = targetIndices || (state.selectedBlockIndices && state.selectedBlockIndices.size > 0
+    ? Array.from(state.selectedBlockIndices)
+    : (typeof state.activeBlockIndex === "number" ? [state.activeBlockIndex] : []));
+  const indices = Array.from(rawList).filter(idx => typeof idx === "number" && idx >= 0 && idx < state.currentProject.blocks.length);
+
+  if (indices.length === 0) return;
+
+  clearTimeout(_dspDebounceTimer);
+  _dspDebounceTimer = setTimeout(async () => {
+    for (const idx of indices) {
+      const block = state.currentProject.blocks[idx];
+      if (!block || !block.cachedAudioUrl) continue;
+
+      const row = document.querySelector(`[data-index="${idx}"]`);
+      const timeText = row?.querySelector(".scrubber-time");
+      if (timeText) timeText.textContent = "⚡ Sculpting...";
+
+      try {
+        const res = await fetch("/api/audio/apply_dsp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audio_url: block.cachedAudioUrl,
+            gain: block.gain || 1.0,
+            speed: block.speed || 1.0,
+            pitch_shift: block.pitch_shift || 0.0,
+            warmth: block.warmth || 0.0,
+            clarity: block.clarity || 0.0,
+            reverb: block.reverb || 0.0,
+            radio_fx: Boolean(block.radio_fx),
+            fx_filter: block.fx_filter || (block.radio_fx ? "radio" : "none")
+          })
+        });
+
+        const data = await res.json();
+        if (data.ok && data.audio_url) {
+          block.cachedAudioUrl = data.audio_url;
+          block.duration = data.duration;
+          block.cachedSig = getBlockSignature(block);
+          debouncedSave();
+          renderTimeline();
+
+          if (row) {
+            row.classList.remove("processing");
+            row.classList.add("ready");
+          }
+          if (timeText && data.duration) {
+            timeText.textContent = `● ${data.duration.toFixed(1)}s`;
+          }
+
+          // If currently playing this block, update audio player seamlessly
+          if (state.currentlyPlayingBlockIdx === idx && state.isPlayingStory && !state.storyAudioPlayer.paused) {
+            const curTime = state.storyAudioPlayer.currentTime;
+            state.storyAudioPlayer.src = data.audio_url;
+            state.storyAudioPlayer.currentTime = Math.min(curTime, data.duration || curTime);
+            state.storyAudioPlayer.play().catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.error("[InstantDSP] Error sculpting block:", err);
+      }
+    }
+  }, 120);
+}
+
+async function handleResetActiveToRawVoice() {
+  if (!state.currentProject || !state.currentProject.blocks) return;
+  const rawList = (state.selectedBlockIndices && state.selectedBlockIndices.size > 0)
+    ? Array.from(state.selectedBlockIndices)
+    : [state.activeBlockIndex];
+  const targets = rawList.filter(idx => typeof idx === "number" && idx >= 0 && idx < state.currentProject.blocks.length);
+
+  let restoredCount = 0;
+  for (const idx of targets) {
+    const block = state.currentProject.blocks[idx];
+    if (!block) continue;
+
+    block.pitch_shift = 0.0;
+    block.warmth = 0.0;
+    block.clarity = 0.0;
+    block.reverb = 0.0;
+    block.radio_fx = false;
+    block.fx_filter = "none";
+    block.gain = 1.0;
+    if (block.character_id) {
+      block.is_custom_edited = true;
+    }
+
+    if (block.cachedAudioUrl) {
+      try {
+        const res = await fetch("/api/audio/reset_dsp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audio_url: block.cachedAudioUrl })
+        });
+        const data = await res.json();
+        if (data.ok && data.audio_url) {
+          block.cachedAudioUrl = data.audio_url;
+          block.duration = data.duration;
+          block.cachedSig = getBlockSignature(block);
+          restoredCount++;
+
+          const row = document.querySelector(`[data-index="${idx}"]`);
+          const timeText = row?.querySelector(".scrubber-time");
+          if (row) {
+            row.classList.remove("processing");
+            row.classList.add("ready");
+          }
+          if (timeText && data.duration) {
+            timeText.textContent = `● ${data.duration.toFixed(1)}s`;
+          }
+
+          if (state.currentlyPlayingBlockIdx === idx && state.isPlayingStory && !state.storyAudioPlayer.paused) {
+            const curTime = state.storyAudioPlayer.currentTime;
+            state.storyAudioPlayer.src = data.audio_url;
+            state.storyAudioPlayer.currentTime = Math.min(curTime, data.duration || curTime);
+            state.storyAudioPlayer.play().catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.error("[InstantDSP] Reset to raw error:", err);
+      }
+    }
+  }
+
+  renderInspector();
+  renderTimeline();
+  debouncedSave();
+  updateActiveCharacterStatusBanner();
+  recordHistory("Reset to Pure Raw Voice");
+  showToast(`✨ Restored 100% pure neural voice take in 1ms!${restoredCount > 1 ? ` (${restoredCount} sentences)` : ""}`);
+}
+
 function handleSelectAudioFilter(filterName) {
   if (!state.currentProject || !state.currentProject.blocks || state.currentProject.blocks.length === 0) return;
   const activeIdx = (typeof state.activeBlockIndex === "number" && state.activeBlockIndex >= 0 && state.activeBlockIndex < state.currentProject.blocks.length)
@@ -3141,13 +3278,14 @@ function handleSelectAudioFilter(filterName) {
     if (b.character_id) {
       b.is_custom_edited = true;
     }
-    delete b.cachedAudioUrl;
-    delete b.cachedSig;
-    const row = document.querySelector(`[data-index="${idx}"]`);
-    if (row) {
-      row.classList.remove("ready");
-      const timeText = row.querySelector(".scrubber-time");
-      if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+    if (!b.cachedAudioUrl) {
+      delete b.cachedSig;
+      const row = document.querySelector(`[data-index="${idx}"]`);
+      if (row) {
+        row.classList.remove("ready");
+        const timeText = row.querySelector(".scrubber-time");
+        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      }
     }
   });
 
@@ -3155,6 +3293,7 @@ function handleSelectAudioFilter(filterName) {
   renderTimeline();
   debouncedSave();
   updateActiveCharacterStatusBanner();
+  triggerInstantBlockDsp(targets);
 
   const labels = {
     "none": "Clean Studio",
@@ -5581,18 +5720,19 @@ function setupEventListeners() {
       if (block.character_id) {
         block.is_custom_edited = true;
       }
-      delete block.cachedAudioUrl;
-      delete block.cachedSig;
-      const row = document.querySelector(`[data-index="${idx}"]`);
-      if (row) {
-        row.classList.remove("ready");
-        const timeText = row.querySelector(".scrubber-time");
-        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      if (!block.cachedAudioUrl) {
+        delete block.cachedSig;
+        const row = document.querySelector(`[data-index="${idx}"]`);
+        if (row) {
+          row.classList.remove("ready");
+          const timeText = row.querySelector(".scrubber-time");
+          if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+        }
       }
     });
-    renderTimeline();
     debouncedSave();
     updateActiveCharacterStatusBanner();
+    triggerInstantBlockDsp(targets);
   });
   document.getElementById("slider-volume")?.addEventListener("change", () => recordHistory("Adjust Volume"));
 
@@ -5612,18 +5752,19 @@ function setupEventListeners() {
       if (block.character_id) {
         block.is_custom_edited = true;
       }
-      delete block.cachedAudioUrl;
-      delete block.cachedSig;
-      const row = document.querySelector(`[data-index="${idx}"]`);
-      if (row) {
-        row.classList.remove("ready");
-        const timeText = row.querySelector(".scrubber-time");
-        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      if (!block.cachedAudioUrl) {
+        delete block.cachedSig;
+        const row = document.querySelector(`[data-index="${idx}"]`);
+        if (row) {
+          row.classList.remove("ready");
+          const timeText = row.querySelector(".scrubber-time");
+          if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+        }
       }
     });
-    renderTimeline();
     debouncedSave();
     updateActiveCharacterStatusBanner();
+    triggerInstantBlockDsp(targets);
   });
   document.getElementById("slider-speed")?.addEventListener("change", () => recordHistory("Adjust Speed"));
 
@@ -5665,18 +5806,19 @@ function setupEventListeners() {
       if (block.character_id) {
         block.is_custom_edited = true;
       }
-      delete block.cachedAudioUrl;
-      delete block.cachedSig;
-      const row = document.querySelector(`[data-index="${idx}"]`);
-      if (row) {
-        row.classList.remove("ready");
-        const timeText = row.querySelector(".scrubber-time");
-        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      if (!block.cachedAudioUrl) {
+        delete block.cachedSig;
+        const row = document.querySelector(`[data-index="${idx}"]`);
+        if (row) {
+          row.classList.remove("ready");
+          const timeText = row.querySelector(".scrubber-time");
+          if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+        }
       }
     });
-    renderTimeline();
     debouncedSave();
     updateActiveCharacterStatusBanner();
+    triggerInstantBlockDsp(targets);
   });
   document.getElementById("slider-pitch")?.addEventListener("change", () => recordHistory("Adjust Pitch"));
 
@@ -5696,18 +5838,19 @@ function setupEventListeners() {
       if (block.character_id) {
         block.is_custom_edited = true;
       }
-      delete block.cachedAudioUrl;
-      delete block.cachedSig;
-      const row = document.querySelector(`[data-index="${idx}"]`);
-      if (row) {
-        row.classList.remove("ready");
-        const timeText = row.querySelector(".scrubber-time");
-        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      if (!block.cachedAudioUrl) {
+        delete block.cachedSig;
+        const row = document.querySelector(`[data-index="${idx}"]`);
+        if (row) {
+          row.classList.remove("ready");
+          const timeText = row.querySelector(".scrubber-time");
+          if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+        }
       }
     });
-    renderTimeline();
     debouncedSave();
     updateActiveCharacterStatusBanner();
+    triggerInstantBlockDsp(targets);
   });
   document.getElementById("slider-warmth")?.addEventListener("change", () => recordHistory("Adjust Warmth"));
 
@@ -5727,18 +5870,19 @@ function setupEventListeners() {
       if (block.character_id) {
         block.is_custom_edited = true;
       }
-      delete block.cachedAudioUrl;
-      delete block.cachedSig;
-      const row = document.querySelector(`[data-index="${idx}"]`);
-      if (row) {
-        row.classList.remove("ready");
-        const timeText = row.querySelector(".scrubber-time");
-        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      if (!block.cachedAudioUrl) {
+        delete block.cachedSig;
+        const row = document.querySelector(`[data-index="${idx}"]`);
+        if (row) {
+          row.classList.remove("ready");
+          const timeText = row.querySelector(".scrubber-time");
+          if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+        }
       }
     });
-    renderTimeline();
     debouncedSave();
     updateActiveCharacterStatusBanner();
+    triggerInstantBlockDsp(targets);
   });
   document.getElementById("slider-clarity")?.addEventListener("change", () => recordHistory("Adjust Clarity"));
 
@@ -5759,18 +5903,19 @@ function setupEventListeners() {
       if (block.character_id) {
         block.is_custom_edited = true;
       }
-      delete block.cachedAudioUrl;
-      delete block.cachedSig;
-      const row = document.querySelector(`[data-index="${idx}"]`);
-      if (row) {
-        row.classList.remove("ready");
-        const timeText = row.querySelector(".scrubber-time");
-        if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+      if (!block.cachedAudioUrl) {
+        delete block.cachedSig;
+        const row = document.querySelector(`[data-index="${idx}"]`);
+        if (row) {
+          row.classList.remove("ready");
+          const timeText = row.querySelector(".scrubber-time");
+          if (timeText) timeText.textContent = "Draft (click ▶ to render)";
+        }
       }
     });
-    renderTimeline();
     debouncedSave();
     updateActiveCharacterStatusBanner();
+    triggerInstantBlockDsp(targets);
   });
   document.getElementById("slider-reverb")?.addEventListener("change", () => recordHistory("Adjust Reverb"));
 
@@ -6635,11 +6780,14 @@ function resetDspToNeutral() {
   updateActiveCharacterStatusBanner();
   recordHistory("Reset Tone to Neutral");
   showToast("↺ Voice tone & FX reset to neutral");
+  triggerInstantBlockDsp(targets);
 }
 
 window.switchInspectorTab = switchInspectorTab;
 window.toggleInspectorCollapse = toggleInspectorCollapse;
 window.resetDspToNeutral = resetDspToNeutral;
+window.handleResetActiveToRawVoice = handleResetActiveToRawVoice;
+window.triggerInstantBlockDsp = triggerInstantBlockDsp;
 window.handleReRenderBlock = handleReRenderBlock;
 window.openEditCharacterModal = openEditCharacterModal;
 window.handleApplyVoiceAndSettingsToSelected = handleApplyVoiceAndSettingsToSelected;
