@@ -3176,9 +3176,16 @@ function triggerInstantBlockDsp(targetIndices = null) {
             state.storyAudioPlayer.currentTime = Math.min(curTime, data.duration || curTime);
             state.storyAudioPlayer.play().catch(() => {});
           }
+        } else {
+          if (timeText && block.duration) {
+            timeText.textContent = `● ${block.duration.toFixed(1)}s`;
+          }
         }
       } catch (err) {
         console.error("[InstantDSP] Error sculpting block:", err);
+        if (timeText && block.duration) {
+          timeText.textContent = `● ${block.duration.toFixed(1)}s`;
+        }
       }
     }
   }, 120);
